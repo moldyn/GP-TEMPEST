@@ -1,0 +1,17 @@
+# File path containing the coordinates.
+# filename: /data/evaluation/autoencoder/GraphAutoencoder/data_T4L/T4L_CAdists_0.05contact_50us_100ps_filtered.dat
+filename: /data/evaluation/autoencoder/GraphAutoencoder/data_T4L/T4L_CAdists_0.05contact_50us_100ps.dat
+# File path containing the contact pairs as indices.
+contact_pairs: /data/evaluation/autoencoder/GraphAutoencoder/data_T4L/indices_contact_0.05.ndx
+# File path which will contain all output files.
+output: /data/evaluation/autoencoder/GraphAutoencoder/gae_variable_output/latent_space_invdistances/
+# Number of nodes in the graph (number of residues)
+num_nodes: 162
+# Dimensionality of the latent space
+dim_lat: 2
+# The dimension of the hidden layer
+hidden_dim: 16
+# Learning rate (usually 1e-2 - 1e-6)
+learning_rate: 0.0001
+# Number of epochs for the model to train.
+epochs: 100
