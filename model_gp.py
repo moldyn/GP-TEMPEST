@@ -18,8 +18,7 @@ class TEMPEST_model(nn.Module):
         batch_size,
         learning_rate,
         GP_w,
-        kernel_scale,
-        kernel_nu,
+        kernel,
     ):
         self.cuda = cuda
         self.dim_input = dim_input
@@ -30,10 +29,14 @@ class TEMPEST_model(nn.Module):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.GP_w = GP_w
-        self.kernel = MaternKernel(
-            scale=kernel_scale,
-            nu=kernel_nu,
-            device=cuda,
+        self.kernel = kernel
+        self.tempest = TEMPEST(
+            cuda=self.cuda,
+            dim_input=self.dim_input,
+            dim_latent=self.dim_latent,
+            layers_hidden_encoder=self.layers_hidden_encoder,
+            layers_hidden_decoder=self.layers_hidden_decoder,
+            inducing_points=self.inducing_points,
         )
 
     def save_model(self, path):

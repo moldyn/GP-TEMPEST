@@ -4,6 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def _num_stabilize_diag(mat, stabilizer=1e-8):
+    diag = torch.eye(mat.size(-1), device=mat.device).expand(mat.shape)
+    return mat + stabilizer * diag
+
 class FeedForwardNN(nn.Module):
     """Simple linear NN with ReLU activation."""
     def __init__(self, layer_sizes):
@@ -122,14 +126,14 @@ class MaternKernel(nn.Module):
             prefac = (torch.sqrt(5) * distance).add(1).add(5.0 / 3.0 * distance**2)
         return prefac * exp_component
 
-    def forward(self, t1, t2):
+    def kernel_mat(self, t1, t2):
         mean = t1.mean(dim=-2, keepdim=True)
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
         distance = torch.cdist(t1_s, t2_s).clamp(min=1e-15)
         return self._compute_kernel(distance)
 
-    def forward_diag(self, t1, t2):
+    def kernel_diag(self, t1, t2):
         mean = t1.mean(dim=-2, keepdim=True)
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -140,23 +144,116 @@ class MaternKernel(nn.Module):
 class TEMPEST(nn.Module):
     def __init__(
         self,
+        cuda,
+        kernel,
         dim_input,
         dim_latent,
         layers_hidden_encoder,
         layers_hidden_decoder,
-        cuda,
+        inducing_points,
+        N_data,
     ):
         """Initializes the TEMPEST network architecture."""
         super().__init__()
         self.cuda = cuda
+        self.kernel = kernel
+        self.inducing_points = inducing_points
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(self.layers_encoder)
         self.decoder = FeedForwardNN(self.layers_decoder)
+        self.N_data = N_data
 
-    def forward(self, x, t):
-        """Forward pass through the network."""
-        z = self.encoder(x)
+    def compute_kernel_matrices(self, t):
+        self.kernel_mm = self.kernel.kernel_mat(
+            self.inducing_points,
+            self.inducing_points,
+        )
+        self.kernel_mm_inv = torch.linalg.inv(
+            _num_stabilize_diag(self.kernel_mm),
+        )
+        self.kernel_nn = self.kernel.kernel_diag(t, t)
+        self.kernel_nm = self.kernel.kernel_mat(t, self.inducing_points)
+        self.kernel_mn = torch.transpose(self.kernel_nm, 0, 1)
+
+
+    def approximate_posterior(self, t, qzx_mu, qzx_var):
+        constant = self.N_data / t.shape[0]
+        Sigma_l = self.kernel_mm + constant * torch.matmul(
+            self.kernel_mn,
+            self.kernel_nm / qzx_var.unsqueeze(1),
+        )  # see Eq.(9) in Jazbec21
+        Sigma_l_inv = torch.linalg.inv(_num_stabilize_diag(Sigma_l))
+        self.mu_l = constant * torch.matmul(
+            self.kernel_mm,  # error: original code takes self.kernel_nm
+            torch.matmul(
+                Sigma_l_inv,
+                torch.matmul(
+                    self.kernel_mn,
+                    qzx_mu / qzx_var,
+                )
+            )
+        )
+        self.A_l = torch.matmul(
+            self.kernel_mm,
+            torch.matmul(
+                Sigma_l_inv,
+                self.kernel_mm,
+            ),
+        )
+        self.GP_mean_vector = constant * torch.matmul(
+            self.kernel_nm,
+            torch.matmul(
+                Sigma_l_inv,
+                torch.matmul(
+                    self.kernel_mn,
+                    qzx_mu / qzx_var,
+                )
+            )
+        )  # Eq.(7) in Tian24 Methods
+        self.GP_mean_sigma = self.kernel_nn + torch.diagonal(
+            -torch.matmul(
+                self.kernel_nm,
+                torch.matmul(
+                    self.kernel_mm_inv,
+                    self.kernel_mn,
+                )
+            ) + torch.matmul(
+                self.kernel_nm,
+                torch.matmul(
+                    Sigma_l_inv,
+                    self.kernel_mn,
+                )
+            )
+        )
+        # GP_mean_vector and GP_mean_sigma is updated posterior, while mu_l and A_l acts more like a prior (compare eq 9 in Tian24)
+
+
+    def variational_loss(self, t, x, beta):
+        """
+        Compute the Hensman loss term for the current batch.
+        Compare eg. Eq.(7) and (10) in Jazbec21
+        """
+
+
+    def gp_step(self, x, t):
+        qzx = self.encoder(x)
+        qzx_mu = qzx['means']
+        qzx_var = qzx['variances']
+
+        self.compute_kernel_matrices(t)
+        for latent_dim in range(self.dim_latent):  # l for channel
+            self.approximate_posterior(
+                t,
+                qzx_mu[latent_dim],  # check dim of qzx_mu
+                qzx_var[latent_dim],
+            )
+            self.variational_loss
+
+
+
+
+
         x_recon = self.decoder(z)
         return x_recon
 
