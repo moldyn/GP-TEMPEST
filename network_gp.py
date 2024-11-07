@@ -2,6 +2,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions.normal import Normal
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def _num_stabilize_diag(mat, stabilizer=1e-8):
@@ -16,7 +18,11 @@ def _cholesky_log_determinant(mat):
     return 2 * torch.sum(torch.log(torch.diagonal(cholesky_decomposition)))
 
 
-
+def _reparameterize(self, mu, var):
+    """Reparameterize to enable backpropagation."""
+    std = torch.exp(0.5 * torch.log(var))
+    eps = torch.randn_like(std)
+    return mu + eps * std
 
 
 class FeedForwardNN(nn.Module):
@@ -81,17 +87,11 @@ class GaussianLayer(nn.Module):
         self.mu = FeedForwardNN(layers_gaussian)
         self.var = FeedForwardNN(layers_gaussian)
 
-    def reparameterize(self, mu, var):
-        """Reparameterize to enable backpropagation."""
-        std = torch.sqrt(var)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
     def forward(self, x):
         """Learns latent space and samples from learned Gaussian."""
         mu = self.mu(x)
         var = F.softplus(self.var(x))
-        z = self.reparameterize(mu, var)
+        z = _reparameterize(mu, var)
         return mu, var, z
 
 
@@ -173,6 +173,7 @@ class TEMPEST(nn.Module):
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(self.layers_encoder)
         self.decoder = FeedForwardNN(self.layers_decoder)
+        self.decoder.add_layer('sigmoid', nn.Sigmoid())
         self.N_data = N_data
 
     def compute_kernel_matrices(self, t):
@@ -214,7 +215,7 @@ class TEMPEST(nn.Module):
             ),
         )
 
-    def approximate_posterior(self, t, qzx_mu, qzx_var):
+    def compute_gp_params(self, t, qzx_mu, qzx_var):
         constant = self.N_data / t.shape[0]
         Sigma_l = self.kernel_mm + constant * torch.matmul(
             self.kernel_mn,
@@ -282,6 +283,7 @@ class TEMPEST(nn.Module):
             self.kernel_mm_inv,
             self.mu_l,
         ) + log_det_kmm - log_det_A))
+
         # compute L3 sum term
         mean_vec = torch.matmul(
             self.kernel_mn,
@@ -290,6 +292,7 @@ class TEMPEST(nn.Module):
                 self.mu_l,
             )
         )  # first term in Jazbec21 SI, B.1 first eq.
+
         precision = 1 / qzx_var
         k_iitilde = self._compute_diagonal_kernel(precision)
         Lambda = self._compute_Lambda()
@@ -300,13 +303,13 @@ class TEMPEST(nn.Module):
                 Lambda,
             ),
         )
-        loss_term_L3 = -0.5 * torch.sum(
+        loss_recon = -0.5 * torch.sum(
             torch.sum(k_iitilde) + torch.sum(tr_ALambda) +
             torch.sum(torch.log(qzx_var)) + m *
             torch.log(2 * 3.1415927410125732) +
             torch.sum(precision * (qzx_mu - mean_vec)**2)
-        )
-        return loss_term_L3, KL_div
+        )  # this is the L3 loss from Hensman
+        return loss_recon, KL_div
 
     def gauss_cross_entropy(mu_l, GP_mean_sigma, qzx_mu, qzx_var):
         """Proof see SI Tian24, Proposition 4 on p.83"""
@@ -323,21 +326,102 @@ class TEMPEST(nn.Module):
         qzx_var = qzx['variances']
 
         self.compute_kernel_matrices(t)
+        gp_mean, gp_var = [], []
+        loss_recon, loss_KL = [], []
+
         for latent_dim in range(self.dim_latent):  # l for channel
-            self.approximate_posterior(
+            self.compute_gp_params(
                 t,
                 qzx_mu[latent_dim],  # check dim of qzx_mu
                 qzx_var[latent_dim],
             )
-            self.variational_loss(
+            gp_mean.append(self.GP_mean_vector)
+            gp_var.append(self.GP_mean_sigma)
+            l_recon, l_KL = self.variational_loss(
                 qzx_mu[latent_dim],  # check dim of qzx_mu
                 qzx_var[latent_dim],
             )
+            loss_recon.append(l_recon)
+            loss_KL.append(l_KL)
+        loss_recon = torch.sum(torch.stack(loss_recon, dim=-1))
+        loss_KL = torch.sum(torch.stack(loss_KL, dim=-1))
+
+        elbo_gp = loss_recon - (x.shape[0] / len(self.inducing_points)) * loss_KL
+
+        gp_mean = torch.stack(gp_mean, dim=1)
+        gp_var = torch.stack(gp_var, dim=1)
+        gp_cross_entropy = torch.sum(
+            self.gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
+        )
+        self.gp_KL = gp_cross_entropy - elbo_gp
+        latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
+        latent_samples = latent_dist.rsample()
+
+        # decode and reconstruction loss
+        qxz = self.decoder(latent_samples)
+        loss_L2 = nn.MSELoss(reduction='mean')
+        self.recon_loss = loss_L2(qxz, x)
+
+        self.elbo = self.recon_loss + self.beta * self.gp_KL
+
+    def get_latent_space(self, x, t):
+        self.eval()
+        latent_samples = []
+
+        print(type(x))  # if x not torch tensor then x = torch.tensor(x, dtype=self.dtype)
+        print(x.shape[0], t.shape[0])
+
+        num = t.shape[0]
+        num_batches = int(num / self.batch_size)
+
+        for idx_batch in range(num_batches):  # loop through all batches
+            t_batch = t[
+                idx_batch * self.batch_size:min((idx_batch + 1) * self.batch_size, num)
+            ].to(self.cuda)
+            x_batch = x[
+                idx_batch * self.batch_size:min((idx_batch + 1) * self.batch_size, num)
+            ].to(self.cuda)
+            qzx = self.encoder(x_batch)
+            qzx_mu = qzx['means']
+            qzx_var = qzx['variances']  # maybe clamp to ensure positive variance?
+            gp_mean, gp_var = [], []
+            for latent_dim in range(self.dim_latent):
+                self.compute_gp_params(
+                    t_batch,
+                    qzx_mu[latent_dim],
+                    qzx_var[latent_dim],
+                )
+                gp_mean.append(self.GP_mean_vector)
+                gp_var.append(self.GP_mean_sigma)
+            gp_mean = torch.stack(gp_mean, dim=1)
+            gp_var = torch.stack(gp_var, dim=1)
+            latent_samples_batch = _reparameterize(gp_mean, gp_var)
+            latent_samples.append(latent_samples_batch.cpu().detach().numpy())
+        return torch.cat(latent_samples, dim=0)
+
+    def train(
+        self,
+        learning_rate,
+        batch_size,
+        n_epochs,
+    ):
+        """Train the TEMPEST model.
+
+        Args:
+            learning_rate (float): learning rate; typicalle 1e-3 to 1e-5
+            batch_size (int): the batch size. As the estimators for the sparse
+                GP regression converge to the estimators for
+                batch size -> number frames, we recommend larger
+                batch sizes > 512
+            n_epochs (int): number of epochs to train
+        """
+        self.train()
 
 
 
 
 
-        x_recon = self.decoder(z)
-        return x_recon
+
+
+
 
