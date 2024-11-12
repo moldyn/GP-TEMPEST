@@ -54,3 +54,7 @@ class TEMPEST_model(nn.Module):
         qzx = self.encoder(x)
         qzx_mu = qzx['means']
         qzx_var = qzx['variances']
+
+
+
+

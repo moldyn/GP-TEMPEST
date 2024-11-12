@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
 
 def _num_stabilize_diag(mat, stabilizer=1e-8):
@@ -164,7 +164,12 @@ class TEMPEST(nn.Module):
         inducing_points,
         N_data,
     ):
-        """Initializes the TEMPEST network architecture."""
+        """Initializes the TEMPEST network architecture.
+            inducing_points (array_like): the inducing points which are used
+                for the sparse GP regression. This inducing points should cover
+                important events over the time series such as transitions and
+                timepoints in which the system is in a metastable state.
+        """
         super().__init__()
         self.cuda = cuda
         self.kernel = kernel
@@ -266,7 +271,6 @@ class TEMPEST(nn.Module):
         )
         # GP_mean_vector and GP_mean_sigma is updated posterior, while mu_l and A_l acts more like a prior (compare eq 9 in Tian24)
 
-
     def variational_loss(self, qzx_mu, qzx_var):
         """
         Compute the Hensman loss term for the current batch.
@@ -292,7 +296,6 @@ class TEMPEST(nn.Module):
                 self.mu_l,
             )
         )  # first term in Jazbec21 SI, B.1 first eq.
-
         precision = 1 / qzx_var
         k_iitilde = self._compute_diagonal_kernel(precision)
         Lambda = self._compute_Lambda()
@@ -324,11 +327,9 @@ class TEMPEST(nn.Module):
         qzx = self.encoder(x)
         qzx_mu = qzx['means']
         qzx_var = qzx['variances']
-
         self.compute_kernel_matrices(t)
         gp_mean, gp_var = [], []
         loss_recon, loss_KL = [], []
-
         for latent_dim in range(self.dim_latent):  # l for channel
             self.compute_gp_params(
                 t,
@@ -345,9 +346,7 @@ class TEMPEST(nn.Module):
             loss_KL.append(l_KL)
         loss_recon = torch.sum(torch.stack(loss_recon, dim=-1))
         loss_KL = torch.sum(torch.stack(loss_KL, dim=-1))
-
         elbo_gp = loss_recon - (x.shape[0] / len(self.inducing_points)) * loss_KL
-
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
         gp_cross_entropy = torch.sum(
@@ -361,7 +360,6 @@ class TEMPEST(nn.Module):
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
         self.recon_loss = loss_L2(qxz, x)
-
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def get_latent_space(self, x, t):
@@ -376,10 +374,14 @@ class TEMPEST(nn.Module):
 
         for idx_batch in range(num_batches):  # loop through all batches
             t_batch = t[
-                idx_batch * self.batch_size:min((idx_batch + 1) * self.batch_size, num)
+                idx_batch * self.batch_size:min(
+                    (idx_batch + 1) * self.batch_size, num,
+                )
             ].to(self.cuda)
             x_batch = x[
-                idx_batch * self.batch_size:min((idx_batch + 1) * self.batch_size, num)
+                idx_batch * self.batch_size:min(
+                    (idx_batch + 1) * self.batch_size, num,
+                )
             ].to(self.cuda)
             qzx = self.encoder(x_batch)
             qzx_mu = qzx['means']
@@ -399,9 +401,11 @@ class TEMPEST(nn.Module):
             latent_samples.append(latent_samples_batch.cpu().detach().numpy())
         return torch.cat(latent_samples, dim=0)
 
-    def train(
+    def train_model(
         self,
+        train_size,
         learning_rate,
+        weight_decay,
         batch_size,
         n_epochs,
     ):
@@ -415,7 +419,77 @@ class TEMPEST(nn.Module):
                 batch sizes > 512
             n_epochs (int): number of epochs to train
         """
-        self.train()
+        dataset = TensorDataset(
+            torch.tensor(self.inducing_points, dtype=self.dtype),
+        )
+        train_dataset, test_dataset = random_split(
+            dataset=dataset,
+            lengths=[train_size, len(dataset) - train_size],
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            # drop_last=False,  # to do?
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        optimizer = torch.optim.AdamW(
+           filter(lambda p: p.requires_grad, self.parameters()),
+           lr=learning_rate,
+           weight_decay=weight_decay,
+        )
+        for nr_epoch in range(n_epochs):
+            l_train_elbo, l_train_recon, l_train_gp = self.train_epoch(
+                train_loader, optimizer, is_training=True,
+            )
+            l_test_elbo, l_test_recon, l_test_gp = self.train_epoch(
+                test_loader, is_training=False,
+            )
+            print(
+                f'Epoch {nr_epoch}: ELBO | {l_train_elbo:.5f}, '
+                f'Recon Loss {l_train_recon:.5f}, '
+                f'GP Loss {l_train_gp:.5f} | ',
+                f'Val ELBO | {l_test_elbo:.5f}, Val Recon {l_test_recon:.5f}, '
+                f'Val GP Loss {l_test_gp:.5f}',
+            )
+        torch.save(self.state_dict(), 'model.pt')
+
+    def train_epoch(self, loader, optimizer, is_training=True):
+        """Train the model for one epoch.
+
+        Args:
+            loader (DataLoader): DataLoader for training data.
+            optimizer (torch.optim.Optimizer): Optimizer for model parameters.
+
+        Returns:
+            tuple: Average training losses (ELBO, reconstruction, GP KL) for the epoch.
+        """
+        nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
+
+        for t_batch, x_batch in loader:
+            t_batch, x_batch = t_batch.to(self.cuda), x_batch.to(self.cuda)
+            if is_training:
+                optimizer.zero_grad()
+
+            # Perform a step of GP computation and forward pass
+            self.gp_step(x_batch, t_batch)
+
+            # Accumulate losses
+            loss_elbo += self.elbo.item()
+            loss_recon += self.recon_loss.item()
+            loss_gp += self.gp_KL.item()
+            if is_training:
+                self.elbo.backward(retain_graph=True)  # Backpropagation
+                optimizer.step()  # Update model parameters
+
+            nr_frames += t_batch.shape[0]
+
+        return loss_elbo / nr_frames, loss_recon / nr_frames, \
+            loss_gp / nr_frames
 
 
 
