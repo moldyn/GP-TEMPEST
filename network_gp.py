@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader, random_split
 
 
 def _num_stabilize_diag(mat, stabilizer=1e-8):
@@ -123,7 +123,6 @@ class MaternKernel(nn.Module):
         super(MaternKernel, self).__init__()
         self.scale = torch.tensor([scale], dtype=torch.float32).to(device)
         self.nu = nu
-
         if nu not in {0.5, 1.5, 2.5}:
             raise RuntimeError('nu expected to be 0.5, 1.5, or 2.5')
 
@@ -366,7 +365,7 @@ class TEMPEST(nn.Module):
         self.eval()
         latent_samples = []
 
-        print(type(x))  # if x not torch tensor then x = torch.tensor(x, dtype=self.dtype)
+        print('if x not torch tensor then set it to torch tensor', type(x))  # if x not torch tensor then x = torch.tensor(x, dtype=self.dtype)
         print(x.shape[0], t.shape[0])
 
         num = t.shape[0]
@@ -403,6 +402,7 @@ class TEMPEST(nn.Module):
 
     def train_model(
         self,
+        dataset,
         train_size,
         learning_rate,
         weight_decay,
@@ -419,9 +419,6 @@ class TEMPEST(nn.Module):
                 batch sizes > 512
             n_epochs (int): number of epochs to train
         """
-        dataset = TensorDataset(
-            torch.tensor(self.inducing_points, dtype=self.dtype),
-        )
         train_dataset, test_dataset = random_split(
             dataset=dataset,
             lengths=[train_size, len(dataset) - train_size],
@@ -485,17 +482,8 @@ class TEMPEST(nn.Module):
             if is_training:
                 self.elbo.backward(retain_graph=True)  # Backpropagation
                 optimizer.step()  # Update model parameters
-
             nr_frames += t_batch.shape[0]
 
         return loss_elbo / nr_frames, loss_recon / nr_frames, \
             loss_gp / nr_frames
-
-
-
-
-
-
-
-
 
