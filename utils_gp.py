@@ -27,10 +27,11 @@ def load_prepare_data(input):
     """Load and prepare the data. Returns a TensorDataset."""
     scaler = MinMaxScaler()
     features = np.loadtxt(input)
-    times = np.array(range(len(features)))
+    times = np.array(range(len(features))).reshape(-1, 1)
+    print(np.shape(features), np.shape(times))
     return TensorDataset(
-        scaler.fit_transform(features),
-        scaler.fit_transform(times),
+        torch.tensor(scaler.fit_transform(features), dtype=torch.float32),
+        torch.tensor(scaler.fit_transform(times), dtype=torch.float32),
     )
 
 
@@ -98,7 +99,8 @@ def yaml_config_reader(config: str):
     with open(config, 'r') as stream:
         params = yaml.safe_load(stream)
     return (
-        params.get('data'),
+        params.get('data_path'),
+        params.get('inducing_points_path'),
         params.get('save_path'),
         params.get('cuda'),
         int(params.get('dim_input')),
@@ -107,6 +109,7 @@ def yaml_config_reader(config: str):
         int(params.get('epochs')),
         int(params.get('batch_size')),
         float(params.get('learning_rate')),
+        float(params.get('weight_decay')),
         float(params.get('beta')),
         float(params.get('kernel_nu')),
         float(params.get('kernel_scale')),
@@ -150,8 +153,8 @@ def generate_yaml_config(output_file):
         'learning_rate': 'Learning rate (usually 1e-2 - 1e-6)',
         'weight_decay': 'The decay rate for the optimizer',
         'beta': 'Weight of the Gaussian process loss term',
-        'nu': 'The parameter nu in the Matern kernel',
-        'scale': 'The scale parameter in the Matern kernel (time scale)',
+        'kernel_nu': 'The parameter nu in the Matern kernel',
+        'kernel_scale': 'The scale parameter in the Matern kernel (time scale)',
     }
     with open(output_file, 'w') as yaml_file:
         for key, value in config_data.items():

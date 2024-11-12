@@ -39,7 +39,7 @@ def main(config, generate_config):
     torch.cuda.manual_seed(0)
     torch.autograd.set_detect_anomaly(True)
 
-    dataset = utils_gp.load_data(data_path)
+    dataset = utils_gp.load_prepare_data(data_path)
     inducing_points = np.loadtxt(inducing_points_path)
     print(dataset)
     N_data_points = len(dataset[0])
@@ -54,7 +54,7 @@ def main(config, generate_config):
         layers_hidden_encoder=layers_hidden,
         layers_hidden_decoder=layers_hidden[::-1],
         inducing_points=inducing_points,
-        GP_w=beta,
+        beta=beta,
         N_data=N_data_points,
     )
     tempest.train_model(

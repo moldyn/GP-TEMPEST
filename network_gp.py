@@ -18,12 +18,21 @@ def _cholesky_log_determinant(mat):
     return 2 * torch.sum(torch.log(torch.diagonal(cholesky_decomposition)))
 
 
-def _reparameterize(self, mu, var):
+def _reparameterize(mu, var):
     """Reparameterize to enable backpropagation."""
     std = torch.exp(0.5 * torch.log(var))
     eps = torch.randn_like(std)
     return mu + eps * std
 
+
+def _gauss_cross_entropy(mu_l, GP_mean_sigma, qzx_mu, qzx_var):
+    """Proof see SI Tian24, Proposition 4 on p.83"""
+    log2pi = 1.8378770664093453
+    log_qzx_var = torch.log(qzx_var)
+    scaled_square_diff = (
+        GP_mean_sigma + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
+    ) / qzx_var
+    return - 0.5 * (log2pi + log_qzx_var + scaled_square_diff)
 
 class FeedForwardNN(nn.Module):
     """Simple linear NN with ReLU activation."""
@@ -161,6 +170,7 @@ class TEMPEST(nn.Module):
         layers_hidden_encoder,
         layers_hidden_decoder,
         inducing_points,
+        beta,
         N_data,
     ):
         """Initializes the TEMPEST network architecture.
@@ -170,7 +180,7 @@ class TEMPEST(nn.Module):
                 timepoints in which the system is in a metastable state.
         """
         super().__init__()
-        self.cuda = cuda
+        self.device = torch.device('cuda' if self.cuda else 'cpu')
         self.kernel = kernel
         self.inducing_points = inducing_points
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
@@ -178,6 +188,9 @@ class TEMPEST(nn.Module):
         self.encoder = InferenceNN(self.layers_encoder)
         self.decoder = FeedForwardNN(self.layers_decoder)
         self.decoder.add_layer('sigmoid', nn.Sigmoid())
+        self.encoder = self.encoder.to(self.device)
+        self.decoder = self.decoder.to(self.device)
+        self.beta = beta
         self.N_data = N_data
 
     def compute_kernel_matrices(self, t):
@@ -278,7 +291,7 @@ class TEMPEST(nn.Module):
         """
         m = self.inducing_points.shape[0]
         log_det_kmm = _cholesky_log_determinant(self.kernel_mm)
-        log_det_A = _cholesky_log_determinant
+        log_det_A = _cholesky_log_determinant(self.A_l)
         KL_div = 0.5 * (-m + torch.trace(torch.matmul(
             self.kernel_mm_inv,
             self.A_l,
@@ -313,16 +326,8 @@ class TEMPEST(nn.Module):
         )  # this is the L3 loss from Hensman
         return loss_recon, KL_div
 
-    def gauss_cross_entropy(mu_l, GP_mean_sigma, qzx_mu, qzx_var):
-        """Proof see SI Tian24, Proposition 4 on p.83"""
-        log2pi = 1.8378770664093453
-        log_qzx_var = torch.log(qzx_var)
-        scaled_square_diff = (
-            GP_mean_sigma + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
-        ) / qzx_var
-        return - 0.5 * (log2pi + log_qzx_var + scaled_square_diff)
-
     def gp_step(self, x, t):
+        print(x.dtype, t.dtype)
         qzx = self.encoder(x)
         qzx_mu = qzx['means']
         qzx_var = qzx['variances']
@@ -349,7 +354,7 @@ class TEMPEST(nn.Module):
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
         gp_cross_entropy = torch.sum(
-            self.gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
+            _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
         self.gp_KL = gp_cross_entropy - elbo_gp
         latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
@@ -376,12 +381,12 @@ class TEMPEST(nn.Module):
                 idx_batch * self.batch_size:min(
                     (idx_batch + 1) * self.batch_size, num,
                 )
-            ].to(self.cuda)
+            ].to(self.device)
             x_batch = x[
                 idx_batch * self.batch_size:min(
                     (idx_batch + 1) * self.batch_size, num,
                 )
-            ].to(self.cuda)
+            ].to(self.device)
             qzx = self.encoder(x_batch)
             qzx_mu = qzx['means']
             qzx_var = qzx['variances']  # maybe clamp to ensure positive variance?
@@ -421,7 +426,7 @@ class TEMPEST(nn.Module):
         """
         train_dataset, test_dataset = random_split(
             dataset=dataset,
-            lengths=[train_size, len(dataset) - train_size],
+            lengths=[train_size, 1 - train_size],
         )
         train_loader = DataLoader(
             train_dataset,
@@ -468,7 +473,7 @@ class TEMPEST(nn.Module):
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
 
         for t_batch, x_batch in loader:
-            t_batch, x_batch = t_batch.to(self.cuda), x_batch.to(self.cuda)
+            t_batch, x_batch = t_batch.to(self.device), x_batch.to(self.device)
             if is_training:
                 optimizer.zero_grad()
 
@@ -480,7 +485,7 @@ class TEMPEST(nn.Module):
             loss_recon += self.recon_loss.item()
             loss_gp += self.gp_KL.item()
             if is_training:
-                self.elbo.backward(retain_graph=True)  # Backpropagation
+                self.elbo.backward()  # Backpropagation; removed retain_graph=True in order to save memory
                 optimizer.step()  # Update model parameters
             nr_frames += t_batch.shape[0]
 
