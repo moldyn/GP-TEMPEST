@@ -28,7 +28,6 @@ def load_prepare_data(input):
     scaler = MinMaxScaler()
     features = np.loadtxt(input)
     times = np.array(range(len(features))).reshape(-1, 1)
-    print(np.shape(features), np.shape(times))
     return TensorDataset(
         torch.tensor(scaler.fit_transform(features), dtype=torch.float32),
         torch.tensor(scaler.fit_transform(times), dtype=torch.float32),

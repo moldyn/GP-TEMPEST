@@ -160,9 +160,9 @@ class MaternKernel(nn.Module):
         return prefac * exp_component
 
     def kernel_mat(self, t1, t2):
-        t1 = t1.clone().detach().to(self.device).unsqueeze(-1)
-        t2 = t2.clone().detach().to(self.device).unsqueeze(-1)
-        mean = t1.mean()
+        t1 = t1.clone().detach().to(self.device)
+        t2 = t2.clone().detach().to(self.device)
+        mean = t1.mean()  # only one mean to ensure consistent scaling between t1 and t2
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
         distance = torch.cdist(t1_s, t2_s).clamp(min=1e-15)
@@ -171,7 +171,7 @@ class MaternKernel(nn.Module):
     def kernel_diag(self, t1, t2):
         t1 = t1.clone().detach().to(self.device)
         t2 = t2.clone().detach().to(self.device)
-        mean = t1.mean()
+        mean = t1.mean(dim=-1, keepdim=True).unsqueeze(1)
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
         distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt().clamp(min=1e-15)
@@ -201,7 +201,9 @@ class TEMPEST(nn.Module):
         self.dtype = torch.float32
         self.device = torch.device('cuda' if cuda else 'cpu')
         self.kernel = kernel.to(self.device)
-        self.inducing_points = torch.tensor(inducing_points, dtype=self.dtype).to(self.device)
+        self.inducing_points = torch.tensor(
+            inducing_points, dtype=self.dtype
+        ).to(self.device).unsqueeze(1)
         self.dim_latent = dim_latent
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
@@ -216,27 +218,28 @@ class TEMPEST(nn.Module):
             self.inducing_points,
             self.inducing_points,
         )
-        print(self.kernel_mm.device)
         self.kernel_mm_inv = torch.linalg.inv(
             _num_stabilize_diag(self.kernel_mm),
         )
-        self.kernel_nn = self.kernel.kernel_diag(t, t)
+        self.kernel_nn = self.kernel.kernel_diag(t, t).squeeze()
         self.kernel_nm = self.kernel.kernel_mat(t, self.inducing_points)
-        self.kernel_mn = torch.transpose(self.kernel_nm, 0, 1)
+        self.kernel_mn = self.kernel_nm.transpose(0, 1)
+        # print('kernel_mm', self.kernel_mm.shape)
+        # print('kernel_mm_inv', self.kernel_mm_inv.shape)
+        # print('kernel_nn', self.kernel_nn.shape)
+        # print('kernel_nm', self.kernel_nm.shape)
+        # print('kernel_mn', self.kernel_mn.shape)
 
     def _compute_diagonal_kernel(self, precision):
         """Compute the diagonal elements of the kernel matrix."""
-        return precision * (
-            self.kernel_nn - torch.diagonal(
-                torch.matmul(
-                    self.kernel_nm,
-                    torch.matmul(
-                        self.kernel_mm_inv,
-                        self.kernel_mn,
-                    ),
-                ),
+        diagonal = torch.diagonal(torch.matmul(
+            self.kernel_nm,
+            torch.matmul(
+                self.kernel_mm_inv,
+                self.kernel_mn,
             ),
-        )
+        ))
+        return precision * (self.kernel_nn - diagonal)
 
     def _compute_Lambda(self):
         """Compute the Lambda matrix."""
@@ -321,7 +324,7 @@ class TEMPEST(nn.Module):
 
         # compute L3 sum term
         mean_vec = torch.matmul(
-            self.kernel_mn,
+            self.kernel_nm,
             torch.matmul(
                 self.kernel_mm_inv,
                 self.mu_l,
@@ -340,20 +343,20 @@ class TEMPEST(nn.Module):
         loss_recon = -0.5 * torch.sum(
             torch.sum(k_iitilde) + torch.sum(tr_ALambda) +
             torch.sum(torch.log(qzx_var)) + m *
-            torch.log(2 * 3.1415927410125732) +
+            torch.log(torch.tensor(2 * 3.1415927410125732, dtype=self.dtype)) +
             torch.sum(precision * (qzx_mu - mean_vec)**2)
         )  # this is the L3 loss from Hensman
         return loss_recon, KL_div
 
     def gp_step(self, x, t):
-        print(x.shape)
         qzx = self.encoder(x)
-        qzx_mu = qzx['means']
-        qzx_var = qzx['variances']
+        qzx_mu = qzx['means'].transpose(0, 1)
+        qzx_var = qzx['variances'].transpose(0, 1)
         self.compute_kernel_matrices(t)
         gp_mean, gp_var = [], []
         loss_recon, loss_KL = [], []
         for latent_dim in range(self.dim_latent):  # l for channel
+            print('shapes', qzx_mu[latent_dim].shape, qzx_var[latent_dim].shape)
             self.compute_gp_params(
                 t,
                 qzx_mu[latent_dim],  # check dim of qzx_mu
@@ -372,6 +375,7 @@ class TEMPEST(nn.Module):
         elbo_gp = loss_recon - (x.shape[0] / len(self.inducing_points)) * loss_KL
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
+        print(gp_mean.shape, gp_var.shape, qzx_mu.shape, qzx_var.shape)
         gp_cross_entropy = torch.sum(
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
@@ -390,7 +394,7 @@ class TEMPEST(nn.Module):
         latent_samples = []
 
         print('if x not torch tensor then set it to torch tensor', type(x))  # if x not torch tensor then x = torch.tensor(x, dtype=self.dtype)
-        print(x.shape[0], t.shape[0])
+        print(x.type, t.type)
 
         num = t.shape[0]
         num_batches = int(num / self.batch_size)
@@ -490,7 +494,6 @@ class TEMPEST(nn.Module):
             tuple: Average training losses (ELBO, reconstruction, GP KL) for the epoch.
         """
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
-
         for x_batch, t_batch in loader:
             x_batch = x_batch.clone().detach().to(self.device)
             t_batch = t_batch.clone().detach().to(self.device)
