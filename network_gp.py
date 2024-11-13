@@ -128,32 +128,43 @@ class InferenceNN(nn.Module):
 
 
 class MaternKernel(nn.Module):
-    def __init__(self, scale=1, nu=1.5, device='cuda'):
+    def __init__(self, scale=1, nu=1.5):
         super(MaternKernel, self).__init__()
-        self.scale = torch.tensor([scale], dtype=torch.float32).to(device)
+        self.scale = torch.tensor([scale], dtype=torch.float32)
+        self.device = self.scale.device
         self.nu = nu
         if nu not in {0.5, 1.5, 2.5}:
             raise RuntimeError('nu expected to be 0.5, 1.5, or 2.5')
 
     def _compute_kernel(self, distance):
-        exp_component = torch.exp(-torch.sqrt(self.nu * 2) * distance)
+        exp_component = torch.exp(-torch.sqrt(torch.tensor(
+            self.nu * 2, dtype=torch.float32, device=self.device
+        )) * distance)
         if self.nu == 0.5:
             prefac = 1
         elif self.nu == 1.5:
-            prefac = (torch.sqrt(3) * distance).add(1)
+            prefac = (torch.sqrt(
+                torch.tensor(3.0, dtype=torch.float32, device=self.device)
+            ) * distance).add(1)
         elif self.nu == 2.5:
-            prefac = (torch.sqrt(5) * distance).add(1).add(5.0 / 3.0 * distance**2)
+            prefac = (torch.sqrt(
+                torch.tensor(5.0, dtype=torch.float32, device=self.device)
+            ) * distance).add(1).add(5.0 / 3.0 * distance**2)
         return prefac * exp_component
 
     def kernel_mat(self, t1, t2):
-        mean = t1.mean(dim=-2, keepdim=True)
+        t1 = torch.tensor(t1, dtype=torch.float32).to(self.scale.device).unsqueeze(-1)
+        t2 = torch.tensor(t2, dtype=torch.float32).to(self.scale.device).unsqueeze(-1)
+        mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
         distance = torch.cdist(t1_s, t2_s).clamp(min=1e-15)
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
-        mean = t1.mean(dim=-2, keepdim=True)
+        t1 = torch.tensor(t1, dtype=torch.float32).to(self.scale.device)
+        t2 = torch.tensor(t2, dtype=torch.float32).to(self.scale.device)
+        mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
         distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt().clamp(min=1e-15)
@@ -183,6 +194,7 @@ class TEMPEST(nn.Module):
         self.device = torch.device('cuda' if self.cuda else 'cpu')
         self.kernel = kernel
         self.inducing_points = inducing_points
+        self.dim_latent = dim_latent
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(self.layers_encoder)
@@ -192,6 +204,7 @@ class TEMPEST(nn.Module):
         self.decoder = self.decoder.to(self.device)
         self.beta = beta
         self.N_data = N_data
+        self.dtype = torch.float32
 
     def compute_kernel_matrices(self, t):
         self.kernel_mm = self.kernel.kernel_mat(
@@ -327,7 +340,7 @@ class TEMPEST(nn.Module):
         return loss_recon, KL_div
 
     def gp_step(self, x, t):
-        print(x.dtype, t.dtype)
+        print(x.shape)
         qzx = self.encoder(x)
         qzx_mu = qzx['means']
         qzx_var = qzx['variances']
@@ -472,8 +485,9 @@ class TEMPEST(nn.Module):
         """
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
 
-        for t_batch, x_batch in loader:
-            t_batch, x_batch = t_batch.to(self.device), x_batch.to(self.device)
+        for x_batch, t_batch in loader:
+            x_batch = torch.tensor(x_batch, dtype=self.dtype).to(self.device)
+            t_batch = torch.tensor(t_batch, dtype=self.dtype).to(self.device)
             if is_training:
                 optimizer.zero_grad()
 
