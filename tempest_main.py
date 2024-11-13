@@ -41,7 +41,6 @@ def main(config, generate_config):
 
     dataset = utils_gp.load_prepare_data(data_path)
     inducing_points = np.loadtxt(inducing_points_path)
-    print(dataset)
     N_data_points = len(dataset[0])
     train_size = 0.9
 

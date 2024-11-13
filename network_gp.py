@@ -137,6 +137,12 @@ class MaternKernel(nn.Module):
         if nu not in {0.5, 1.5, 2.5}:
             raise RuntimeError('nu expected to be 0.5, 1.5, or 2.5')
 
+    def to(self, device):
+        """Move the kernel and its parameters to the specified device."""
+        self.device = device
+        self.scale = self.scale.to(device)
+        return self
+
     def _compute_kernel(self, distance):
         exp_component = torch.exp(-torch.sqrt(torch.tensor(
             self.nu * 2, dtype=self.dtype, device=self.device
@@ -155,7 +161,7 @@ class MaternKernel(nn.Module):
 
     def kernel_mat(self, t1, t2):
         t1 = t1.clone().detach().to(self.device).unsqueeze(-1)
-        t2 = torch.tensor(t2, dtype=self.dtype).to(self.device).unsqueeze(-1)
+        t2 = t2.clone().detach().to(self.device).unsqueeze(-1)
         mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -163,8 +169,8 @@ class MaternKernel(nn.Module):
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
-        t1 = torch.tensor(t1, dtype=self.dtype).to(self.device)
-        t2 = torch.tensor(t2, dtype=self.dtype).to(self.device)
+        t1 = t1.clone().detach().to(self.device)
+        t2 = t2.clone().detach().to(self.device)
         mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -210,6 +216,7 @@ class TEMPEST(nn.Module):
             self.inducing_points,
             self.inducing_points,
         )
+        print(self.kernel_mm.device)
         self.kernel_mm_inv = torch.linalg.inv(
             _num_stabilize_diag(self.kernel_mm),
         )
