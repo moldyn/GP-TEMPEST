@@ -132,29 +132,30 @@ class MaternKernel(nn.Module):
         super(MaternKernel, self).__init__()
         self.scale = torch.tensor([scale], dtype=torch.float32)
         self.device = self.scale.device
+        self.dtype = self.scale.dtype
         self.nu = nu
         if nu not in {0.5, 1.5, 2.5}:
             raise RuntimeError('nu expected to be 0.5, 1.5, or 2.5')
 
     def _compute_kernel(self, distance):
         exp_component = torch.exp(-torch.sqrt(torch.tensor(
-            self.nu * 2, dtype=torch.float32, device=self.device
+            self.nu * 2, dtype=self.dtype, device=self.device
         )) * distance)
         if self.nu == 0.5:
             prefac = 1
         elif self.nu == 1.5:
             prefac = (torch.sqrt(
-                torch.tensor(3.0, dtype=torch.float32, device=self.device)
+                torch.tensor(3.0, dtype=self.dtype, device=self.device)
             ) * distance).add(1)
         elif self.nu == 2.5:
             prefac = (torch.sqrt(
-                torch.tensor(5.0, dtype=torch.float32, device=self.device)
+                torch.tensor(5.0, dtype=self.dtype, device=self.device)
             ) * distance).add(1).add(5.0 / 3.0 * distance**2)
         return prefac * exp_component
 
     def kernel_mat(self, t1, t2):
-        t1 = torch.tensor(t1, dtype=torch.float32).to(self.scale.device).unsqueeze(-1)
-        t2 = torch.tensor(t2, dtype=torch.float32).to(self.scale.device).unsqueeze(-1)
+        t1 = t1.clone().detach().to(self.device).unsqueeze(-1)
+        t2 = torch.tensor(t2, dtype=self.dtype).to(self.device).unsqueeze(-1)
         mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -162,8 +163,8 @@ class MaternKernel(nn.Module):
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
-        t1 = torch.tensor(t1, dtype=torch.float32).to(self.scale.device)
-        t2 = torch.tensor(t2, dtype=torch.float32).to(self.scale.device)
+        t1 = torch.tensor(t1, dtype=self.dtype).to(self.device)
+        t2 = torch.tensor(t2, dtype=self.dtype).to(self.device)
         mean = t1.mean()
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -191,20 +192,18 @@ class TEMPEST(nn.Module):
                 timepoints in which the system is in a metastable state.
         """
         super().__init__()
-        self.device = torch.device('cuda' if self.cuda else 'cpu')
-        self.kernel = kernel
-        self.inducing_points = inducing_points
+        self.dtype = torch.float32
+        self.device = torch.device('cuda' if cuda else 'cpu')
+        self.kernel = kernel.to(self.device)
+        self.inducing_points = torch.tensor(inducing_points, dtype=self.dtype).to(self.device)
         self.dim_latent = dim_latent
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
-        self.encoder = InferenceNN(self.layers_encoder)
-        self.decoder = FeedForwardNN(self.layers_decoder)
+        self.encoder = InferenceNN(self.layers_encoder).to(self.device)
+        self.decoder = FeedForwardNN(self.layers_decoder).to(self.device)
         self.decoder.add_layer('sigmoid', nn.Sigmoid())
-        self.encoder = self.encoder.to(self.device)
-        self.decoder = self.decoder.to(self.device)
         self.beta = beta
         self.N_data = N_data
-        self.dtype = torch.float32
 
     def compute_kernel_matrices(self, t):
         self.kernel_mm = self.kernel.kernel_mat(
@@ -486,8 +485,10 @@ class TEMPEST(nn.Module):
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
 
         for x_batch, t_batch in loader:
-            x_batch = torch.tensor(x_batch, dtype=self.dtype).to(self.device)
-            t_batch = torch.tensor(t_batch, dtype=self.dtype).to(self.device)
+            x_batch = x_batch.clone().detach().to(self.device)
+            t_batch = t_batch.clone().detach().to(self.device)
+            # x_batch = torch.tensor(x_batch, dtype=self.dtype).to(self.device)  # use clone().detach() instead of torch.tensor but consumes more memory
+            # t_batch = torch.tensor(t_batch, dtype=self.dtype).to(self.device)
             if is_training:
                 optimizer.zero_grad()
 
