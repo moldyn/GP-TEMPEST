@@ -17,22 +17,22 @@ def _cholesky_log_determinant(mat):
     )
     return 2 * torch.sum(torch.log(torch.diagonal(cholesky_decomposition)))
 
-
 def _reparameterize(mu, var):
     """Reparameterize to enable backpropagation."""
     std = torch.exp(0.5 * torch.log(var))
     eps = torch.randn_like(std)
     return mu + eps * std
 
-
-def _gauss_cross_entropy(mu_l, GP_mean_sigma, qzx_mu, qzx_var):
+def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
     """Proof see SI Tian24, Proposition 4 on p.83"""
-    log2pi = 1.8378770664093453
-    log_qzx_var = torch.log(qzx_var)
+    # print('GP_mean_sigma', var_l)
+    # print('mu_l', mu_l)
+    # print('qzx_mu', qzx_mu)
+    # print('qzx_var', qzx_var)
     scaled_square_diff = (
-        GP_mean_sigma + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
+        var_l + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
     ) / qzx_var
-    return - 0.5 * (log2pi + log_qzx_var + scaled_square_diff)
+    return - 0.5 * (1.8378770664093 + torch.log(qzx_var) + scaled_square_diff)
 
 class FeedForwardNN(nn.Module):
     """Simple linear NN with ReLU activation."""
@@ -52,7 +52,7 @@ class FeedForwardNN(nn.Module):
             )
             if layer_nr < len(layer_sizes) - 2:
                 layers.append(nn.ReLU())
-        self.model = nn.ModuleList(layers)
+        self.model = nn.Sequential(*layers)
 
     def add_layer(self, name, layer):
         """Add a layer or some layers to the model."""
@@ -114,7 +114,7 @@ class InferenceNN(nn.Module):
         self.inference_qzx = FeedForwardNN(layers_encoder)
         self.inference_qzx.add_layer('RELU', nn.ReLU())
         self.inference_qzx.add_layer(
-            'GaussianLayer', GaussianLayer(layers_encoder),
+            'GaussianLayer', GaussianLayer([2, 2]),
         )
 
     def forward(self, x):
@@ -208,6 +208,7 @@ class TEMPEST(nn.Module):
         self.layers_encoder = [dim_input, *layers_hidden_encoder, dim_latent]
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(self.layers_encoder).to(self.device)
+        print(self.encoder)
         self.decoder = FeedForwardNN(self.layers_decoder).to(self.device)
         self.decoder.add_layer('sigmoid', nn.Sigmoid())
         self.beta = beta
@@ -350,23 +351,26 @@ class TEMPEST(nn.Module):
 
     def gp_step(self, x, t):
         qzx = self.encoder(x)
-        qzx_mu = qzx['means'].transpose(0, 1)
-        qzx_var = qzx['variances'].transpose(0, 1)
+        print('qzx', qzx)
+        qzx_mu = qzx['means']
+        qzx_var = qzx['variances']
+        print('mu', qzx_mu)
+        print('var', qzx_var)
         self.compute_kernel_matrices(t)
         gp_mean, gp_var = [], []
         loss_recon, loss_KL = [], []
         for latent_dim in range(self.dim_latent):  # l for channel
-            print('shapes', qzx_mu[latent_dim].shape, qzx_var[latent_dim].shape)
+            # print(qzx_var[:, latent_dim])
             self.compute_gp_params(
                 t,
-                qzx_mu[latent_dim],  # check dim of qzx_mu
-                qzx_var[latent_dim],
+                qzx_mu[:, latent_dim],  # check dim of qzx_mu
+                qzx_var[:, latent_dim],
             )
             gp_mean.append(self.GP_mean_vector)
             gp_var.append(self.GP_mean_sigma)
             l_recon, l_KL = self.variational_loss(
-                qzx_mu[latent_dim],  # check dim of qzx_mu
-                qzx_var[latent_dim],
+                qzx_mu[:, latent_dim],  # check dim of qzx_mu
+                qzx_var[:, latent_dim],
             )
             loss_recon.append(l_recon)
             loss_KL.append(l_KL)
@@ -375,7 +379,6 @@ class TEMPEST(nn.Module):
         elbo_gp = loss_recon - (x.shape[0] / len(self.inducing_points)) * loss_KL
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
-        print(gp_mean.shape, gp_var.shape, qzx_mu.shape, qzx_var.shape)
         gp_cross_entropy = torch.sum(
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
@@ -447,9 +450,11 @@ class TEMPEST(nn.Module):
                 batch sizes > 512
             n_epochs (int): number of epochs to train
         """
+        len_dataset = len(dataset)
+        train_size_samples = int(len_dataset * train_size)
         train_dataset, test_dataset = random_split(
             dataset=dataset,
-            lengths=[train_size, 1 - train_size],
+            lengths=[train_size_samples, len_dataset - train_size_samples],
         )
         train_loader = DataLoader(
             train_dataset,
@@ -472,7 +477,7 @@ class TEMPEST(nn.Module):
                 train_loader, optimizer, is_training=True,
             )
             l_test_elbo, l_test_recon, l_test_gp = self.train_epoch(
-                test_loader, is_training=False,
+                test_loader, optimizer, is_training=False,
             )
             print(
                 f'Epoch {nr_epoch}: ELBO | {l_train_elbo:.5f}, '
@@ -494,24 +499,25 @@ class TEMPEST(nn.Module):
             tuple: Average training losses (ELBO, reconstruction, GP KL) for the epoch.
         """
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
+        if is_training:
+            self.train()
+        else:
+            self.eval()
+
         for x_batch, t_batch in loader:
             x_batch = x_batch.clone().detach().to(self.device)
             t_batch = t_batch.clone().detach().to(self.device)
-            # x_batch = torch.tensor(x_batch, dtype=self.dtype).to(self.device)  # use clone().detach() instead of torch.tensor but consumes more memory
-            # t_batch = torch.tensor(t_batch, dtype=self.dtype).to(self.device)
             if is_training:
                 optimizer.zero_grad()
+            with torch.set_grad_enabled(is_training):
+                self.gp_step(x_batch, t_batch)
+                loss_elbo += self.elbo.item()
+                loss_recon += self.recon_loss.item()
+                loss_gp += self.gp_KL.item()
+                if is_training:
+                    self.elbo.backward()  # Backpropagation; removed retain_graph=True in order to save memory
+                    optimizer.step()  # Update model parameters
 
-            # Perform a step of GP computation and forward pass
-            self.gp_step(x_batch, t_batch)
-
-            # Accumulate losses
-            loss_elbo += self.elbo.item()
-            loss_recon += self.recon_loss.item()
-            loss_gp += self.gp_KL.item()
-            if is_training:
-                self.elbo.backward()  # Backpropagation; removed retain_graph=True in order to save memory
-                optimizer.step()  # Update model parameters
             nr_frames += t_batch.shape[0]
 
         return loss_elbo / nr_frames, loss_recon / nr_frames, \

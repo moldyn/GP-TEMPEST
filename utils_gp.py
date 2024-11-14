@@ -3,7 +3,7 @@
 """Class with helper functions.
 
 MIT License
-Copyright (c) 2022-2023, Georg Diez
+Copyright (c) 2024, Georg Diez
 All rights reserved.
 
 """
