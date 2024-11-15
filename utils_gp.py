@@ -30,7 +30,7 @@ def load_prepare_data(input):
     times = np.array(range(len(features))).reshape(-1, 1)
     return TensorDataset(
         torch.tensor(scaler.fit_transform(features), dtype=torch.float32),
-        torch.tensor(scaler.fit_transform(times), dtype=torch.float32),
+        torch.tensor(times, dtype=torch.float32),
     )
 
 
@@ -49,7 +49,7 @@ def plot_distribution(distances, savename):
     pplt.update_style(style='default')
 
 
-def plot_latent_space(embedding, cluster, filename):
+def plot_latent_space(embedding, filename):
     """Plot the latent space."""
     hist, xedges, yedges = np.histogram2d(
         embedding.T[0],
@@ -82,7 +82,6 @@ def plot_latent_space(embedding, cluster, filename):
         x=embedding[:, 0],
         y=embedding[:, 1],
         ec=None,
-        c = cluster,
         s=1,
         alpha=0.9,
         cmap='tab10',
@@ -161,6 +160,7 @@ def generate_yaml_config(output_file):
                 yaml_file.write(f"# {comments[key]}\n")
             yaml.dump({key: value}, yaml_file, default_flow_style=False)
     return output_file
+
 
 def plot_embedding(graphs, model, output, device, epochs, filename, all_loss):
     loader = DataLoader(graphs, batch_size=100, shuffle=True)

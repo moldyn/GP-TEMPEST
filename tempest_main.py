@@ -41,7 +41,7 @@ def main(config, generate_config):
 
     dataset = utils_gp.load_prepare_data(data_path)
     inducing_points = np.loadtxt(inducing_points_path)
-    N_data_points = len(dataset[0])
+    N_data_points = len(dataset)
     train_size = 0.9
 
     kernel = MaternKernel(nu=kernel_nu, scale=kernel_scale)
@@ -58,6 +58,11 @@ def main(config, generate_config):
     )
     tempest.train_model(
         dataset, train_size, learning_rate, weight_decay, batch_size, epochs,
+    )
+    embedding = tempest.extract_latent_space(dataset, batch_size)
+    utils_gp.plot_latent_space(
+        embedding,
+        f'{save_path}/latent_space.png',
     )
 
 
