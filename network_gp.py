@@ -286,7 +286,7 @@ class TEMPEST(nn.Module):
                 self.kernel_mm,
             ),
         )
-        self.GP_mean_vector = constant * torch.matmul(
+        self.gp_mean_vector = constant * torch.matmul(
             self.kernel_nm,
             torch.matmul(
                 Sigma_l_inv,
@@ -296,7 +296,7 @@ class TEMPEST(nn.Module):
                 )
             )
         )  # Eq.(7) in Tian24 Methods
-        self.GP_mean_sigma = self.kernel_nn + torch.diagonal(
+        self.gp_mean_sigma = self.kernel_nn + torch.diagonal(
             -torch.matmul(
                 self.kernel_nm,
                 torch.matmul(
@@ -369,8 +369,8 @@ class TEMPEST(nn.Module):
                 qzx_mu[:, latent_dim],
                 qzx_var[:, latent_dim],
             )
-            gp_mean.append(self.GP_mean_vector)
-            gp_var.append(self.GP_mean_sigma)
+            gp_mean.append(self.gp_mean_vector)
+            gp_var.append(self.gp_mean_sigma)
             l_L3, l_KL = self.variational_loss(
                 qzx_mu[:, latent_dim],
                 qzx_var[:, latent_dim],
@@ -537,8 +537,8 @@ class TEMPEST(nn.Module):
                     qzx_mu[:, latent_dim],
                     qzx_var[:, latent_dim],
                 )
-                gp_mean.append(self.GP_mean_vector)
-                gp_var.append(self.GP_mean_sigma)
+                gp_mean.append(self.gp_mean_vector)
+                gp_var.append(self.gp_mean_sigma)
             gp_mean = torch.stack(gp_mean, dim=1)
             gp_var = torch.stack(gp_var, dim=1)
             latent_samples_batch = _reparameterize(gp_mean, gp_var)
