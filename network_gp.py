@@ -386,17 +386,14 @@ class TEMPEST(nn.Module):
             )
             loss_L3.append(l_L3)
             loss_KL.append(l_KL)
-        # print('loss kl', loss_KL)
         loss_L3 = torch.sum(torch.stack(loss_L3, dim=-1))
         loss_KL = torch.sum(torch.stack(loss_KL, dim=-1))
-        # print('L3', loss_L3, 'KL',  loss_KL, 'constant', (x.shape[0] / self.N_data))
         elbo_gp = loss_L3 - (x.shape[0] / self.N_data) * loss_KL
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
         gp_cross_entropy = torch.sum(
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
-        # print('CE', gp_cross_entropy, 'ELBO', elbo_gp)
         self.gp_KL = gp_cross_entropy - elbo_gp
         latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
         latent_samples = latent_dist.rsample()
@@ -443,16 +440,16 @@ class TEMPEST(nn.Module):
             batch_size=batch_size,
             shuffle=False,
         )
-        # optimizer = torch.optim.AdamW(
-        #    filter(lambda p: p.requires_grad, self.parameters()),
-        #    lr=learning_rate,
-        #    weight_decay=weight_decay,
-        # )
-        optimizer = torch.optim.Adam(
-            self.parameters(),
-            lr=learning_rate,
-            weight_decay=weight_decay,
+        optimizer = torch.optim.AdamW(
+           filter(lambda p: p.requires_grad, self.parameters()),
+           lr=learning_rate,
+           weight_decay=weight_decay,
         )
+        # optimizer = torch.optim.Adam(
+            # self.parameters(),
+            # lr=learning_rate,
+            # weight_decay=weight_decay,
+        # )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             'min',
@@ -503,7 +500,7 @@ class TEMPEST(nn.Module):
                 loss_gp += self.gp_KL.item()
                 if is_training:
                     self.elbo.backward()  # Backpropagation; removed retain_graph=True in order to save memory
-                    optimizer.step()  # Update model parameters
+                    optimizer.step()
 
             nr_frames += t_batch.shape[0]
 
@@ -511,25 +508,9 @@ class TEMPEST(nn.Module):
             loss_gp / nr_frames
 
     def extract_latent_space(self, dataset, batch_size):
-    # def extract_latent_space(self, x, t):
         self.eval()
         latent_samples = []
 
-        # print('if x not torch tensor then set it to torch tensor', type(x))  # if x not torch tensor then x = torch.tensor(x, dtype=self.dtype)
-        # print(x.type, t.type)
-        # num = t.shape[0]
-        # num_batches = int(num / self.batch_size)
-        # for idx_batch in range(num_batches):  # loop through all batches
-        #     t_batch = t[
-        #         idx_batch * self.batch_size:min(
-        #             (idx_batch + 1) * self.batch_size, num,
-        #         )
-        #     ].to(self.device)
-        #     x_batch = x[
-        #         idx_batch * self.batch_size:min(
-        #             (idx_batch + 1) * self.batch_size, num,
-        #         )
-        #     ].to(self.device)
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,

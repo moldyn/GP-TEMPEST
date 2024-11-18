@@ -4,8 +4,6 @@ import sys
 import click
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 import utils_gp
 from network_gp import TEMPEST, MaternKernel
@@ -71,6 +69,7 @@ def main(config, generate_config):
         embedding,
         f'{save_path}/latent_space.png',
     )
+    np.savetxt(f'{save_path}/embedding.dat', embedding, fmt='%.4f')
 
 
 
