@@ -23,14 +23,14 @@ from torch_geometric.loader import DataLoader
 pplt.use_style()
 
 
-def load_prepare_data(input):
+def load_prepare_data(input, dtype):
     """Load and prepare the data. Returns a TensorDataset."""
     scaler = MinMaxScaler()
     features = np.loadtxt(input)
     times = np.array(range(len(features))).reshape(-1, 1)
     return TensorDataset(
-        torch.tensor(scaler.fit_transform(features), dtype=torch.float32),
-        torch.tensor(times, dtype=torch.float32),
+        torch.tensor(scaler.fit_transform(features), dtype=dtype),
+        torch.tensor(times, dtype=dtype),
     )
 
 

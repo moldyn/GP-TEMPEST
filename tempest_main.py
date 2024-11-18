@@ -38,13 +38,18 @@ def main(config, generate_config):
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
     torch.autograd.set_detect_anomaly(True)
+    dtype = torch.float64
 
-    dataset = utils_gp.load_prepare_data(data_path)
+    dataset = utils_gp.load_prepare_data(data_path, dtype)
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
     train_size = 0.9
 
-    kernel = MaternKernel(nu=kernel_nu, scale=kernel_scale)
+    kernel = MaternKernel(
+        nu=kernel_nu,
+        scale=kernel_scale,
+        dtype=dtype,
+    )
     tempest = TEMPEST(
         cuda=cuda,
         kernel=kernel,
@@ -55,7 +60,9 @@ def main(config, generate_config):
         inducing_points=inducing_points,
         beta=beta,
         N_data=N_data_points,
+        dtype=dtype,
     )
+    print(tempest)
     tempest.train_model(
         dataset, train_size, learning_rate, weight_decay, batch_size, epochs,
     )

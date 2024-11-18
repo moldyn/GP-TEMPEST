@@ -6,7 +6,7 @@ from torch.distributions.normal import Normal
 from torch.utils.data import DataLoader, random_split
 
 
-def _num_stabilize_diag(mat, stabilizer=1e-8):
+def _num_stabilize_diag(mat, stabilizer=1e-6):
     diag = torch.eye(mat.size(-1), device=mat.device).expand(mat.shape)
     return mat + stabilizer * diag
 
@@ -17,11 +17,13 @@ def _cholesky_log_determinant(mat):
     )
     return 2 * torch.sum(torch.log(torch.diagonal(cholesky_decomposition)))
 
+
 def _reparameterize(mu, var):
     """Reparameterize to enable backpropagation."""
-    std = torch.exp(0.5 * torch.log(var))
+    std = torch.sqrt(var)
     eps = torch.randn_like(std)
     return mu + eps * std
+
 
 def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
     """Proof see SI Tian24, Proposition 4 on p.83"""
@@ -92,13 +94,13 @@ class GaussianLayer(nn.Module):
         """Initialize Gaussian layer class."""
         super().__init__()
         self.mu = FeedForwardNN(layers_gaussian)
-        self.log_var = FeedForwardNN(layers_gaussian)
-        self.log_var.add_layer('Softplus', nn.Softplus())
+        self.var = FeedForwardNN(layers_gaussian)
+        self.var.add_layer('Softplus', nn.Softplus())
 
     def forward(self, x):
         """Learns latent space and samples from learned Gaussian."""
         mu = self.mu(x)
-        variance = torch.exp(self.log_var(x))
+        variance = self.var(x)
         z = _reparameterize(mu, variance)
         return mu, variance, z
 
@@ -128,11 +130,11 @@ class InferenceNN(nn.Module):
 
 
 class MaternKernel(nn.Module):
-    def __init__(self, scale=1, nu=1.5):
+    def __init__(self, scale=1, nu=1.5, dtype=torch.float64):
         super(MaternKernel, self).__init__()
-        self.scale = torch.tensor([scale], dtype=torch.float32)
+        self.scale = torch.tensor([scale])
         self.device = self.scale.device
-        self.dtype = self.scale.dtype
+        self.dtype = dtype
         self.nu = nu
         if nu not in {0.5, 1.5, 2.5}:
             raise RuntimeError('nu expected to be 0.5, 1.5, or 2.5')
@@ -165,7 +167,7 @@ class MaternKernel(nn.Module):
         mean = t1.mean(dim=-2, keepdim=True)  # only one mean to ensure consistent scaling between t1 and t2
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
-        distance = torch.cdist(t1_s, t2_s).clamp(min=1e-15)
+        distance = torch.cdist(t1_s, t2_s)
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
@@ -174,7 +176,7 @@ class MaternKernel(nn.Module):
         mean = t1.mean(dim=-1, keepdim=True).unsqueeze(1)
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
-        distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt().clamp(min=1e-15)
+        distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt()
         return self._compute_kernel(distance).squeeze()
 
 
@@ -190,6 +192,7 @@ class TEMPEST(nn.Module):
         inducing_points,
         beta,
         N_data,
+        dtype,
     ):
         """Initializes the TEMPEST network architecture.
             inducing_points (array_like): the inducing points which are used
@@ -198,7 +201,7 @@ class TEMPEST(nn.Module):
                 timepoints in which the system is in a metastable state.
         """
         super().__init__()
-        self.dtype = torch.float32
+        self.dtype = dtype
         self.device = torch.device('cuda' if cuda else 'cpu')
         self.kernel = kernel.to(self.device)
         self.inducing_points = torch.tensor(
@@ -210,21 +213,20 @@ class TEMPEST(nn.Module):
         self.encoder = InferenceNN(
             self.layers_encoder,
             layers_gaussian=[layers_hidden_encoder[-1], dim_latent],
-        ).to(self.device)
-        print(self.encoder)
-        self.decoder = FeedForwardNN(self.layers_decoder).to(self.device)
-        # self.decoder.add_layer('sigmoid', nn.Sigmoid())
+        ).to(self.device).to(self.dtype)
+        self.decoder = FeedForwardNN(self.layers_decoder).to(self.device).to(self.dtype)
+        self.decoder.add_layer('sigmoid', nn.Sigmoid())
         self.beta = beta
         self.N_data = N_data
-        self.init_weights()
+        # self.init_weights()
 
-    def init_weights(self):
-        def _init_weights(m):
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.constant_(m.bias, -1.0)
-        self.encoder.apply(_init_weights)
-        self.decoder.apply(_init_weights)
+    # def init_weights(self):
+    #     def _init_weights(m):
+    #         if isinstance(m, nn.Linear):
+    #             nn.init.xavier_uniform_(m.weight)
+    #             nn.init.constant_(m.bias, -1.0)
+    #     self.encoder.apply(_init_weights)
+    #     self.decoder.apply(_init_weights)
 
     def compute_kernel_matrices(self, t):
         self.kernel_mm = self.kernel.kernel_mat(
@@ -348,6 +350,7 @@ class TEMPEST(nn.Module):
                 Lambda,
             ),
         )
+
         loss_L3 = - 0.5 * torch.sum(
             torch.sum(k_iitilde) + torch.sum(tr_ALambda) +
             torch.sum(torch.log(qzx_var)) + m *
@@ -385,15 +388,14 @@ class TEMPEST(nn.Module):
         gp_cross_entropy = torch.sum(
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
-        print(gp_cross_entropy, elbo_gp)
         self.gp_KL = gp_cross_entropy - elbo_gp
-        latent_dist = Normal(qzx_mu, qzx_var)  # todo: sqrt ja oder nein?
+        latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
         latent_samples = latent_dist.rsample()
 
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = 1e3 * loss_L2(qxz, x)
+        self.recon_loss = loss_L2(qxz, x)
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
@@ -529,7 +531,7 @@ class TEMPEST(nn.Module):
             t_batch = t_batch.clone().detach().to(self.device)
             qzx = self.encoder(x_batch)
             qzx_mu = qzx['means']
-            qzx_var = qzx['variances']  # maybe clamp to ensure positive variance?
+            qzx_var = qzx['variances']
             gp_mean, gp_var = [], []
             for latent_dim in range(self.dim_latent):
                 self.compute_gp_params(
