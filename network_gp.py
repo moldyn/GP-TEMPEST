@@ -1,9 +1,9 @@
-# model.py without GNNs
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 from torch.utils.data import DataLoader, random_split
+from tqdm.auto import tqdm, trange
 
 
 def _num_stabilize_diag(mat, stabilizer=1e-6):
@@ -455,24 +455,41 @@ class TEMPEST(nn.Module):
             'min',
             patience=10,
         )
-        for nr_epoch in range(n_epochs):
+
+        epoch_pbar = trange(n_epochs, desc='Training')  # tqdm for ETA
+        for nr_epoch in epoch_pbar:
+            train_pbar = tqdm(
+                train_loader,
+                desc=f'Epoch {nr_epoch} (train)',
+                leave=False,
+            )
             l_train_elbo, l_train_recon, l_train_gp = self.train_epoch(
-                train_loader, optimizer, is_training=True,
+                train_pbar, optimizer, is_training=True,
             )
             scheduler.step(l_train_elbo)
+            test_pbar = tqdm(
+                test_loader,
+                desc=f'Epoch {nr_epoch} (test)',
+                leave=False,
+            )
             l_test_elbo, l_test_recon, l_test_gp = self.train_epoch(
-                test_loader, optimizer, is_training=False,
+                test_pbar, optimizer, is_training=False,
             )
-            print(
-                f'Epoch {nr_epoch}: ELBO | {l_train_elbo:.5f}, '
-                f'Recon Loss {l_train_recon:.5f}, '
-                f'GP Loss {l_train_gp:.5f} | ',
-                f'Val ELBO | {l_test_elbo:.5f}, Val Recon {l_test_recon:.5f}, '
-                f'Val GP Loss {l_test_gp:.5f}',
-            )
+            epoch_pbar.set_postfix({
+                'Train ELBO': f'{l_train_elbo:.5f}',
+                'Val ELBO': f'{l_test_elbo:.5f}',
+                'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
+            })
+            # print(
+                # f'Epoch {nr_epoch}: ELBO | {l_train_elbo:.5f}, '
+                # f'Recon Loss {l_train_recon:.5f}, '
+                # f'GP Loss {l_train_gp:.5f} | ',
+                # f'Val ELBO | {l_test_elbo:.5f}, Val Recon {l_test_recon:.5f}, '
+                # f'Val GP Loss {l_test_gp:.5f}',
+            # )
         torch.save(self.state_dict(), 'model.pt')
 
-    def train_epoch(self, loader, optimizer, is_training=True):
+    def train_epoch(self, pbar, optimizer, is_training=True):
         """Train the model for one epoch.
 
         Args:
@@ -488,7 +505,7 @@ class TEMPEST(nn.Module):
         else:
             self.eval()
 
-        for x_batch, t_batch in loader:
+        for x_batch, t_batch in pbar:
             x_batch = x_batch.clone().detach().to(self.device)
             t_batch = t_batch.clone().detach().to(self.device)
             if is_training:
@@ -503,7 +520,11 @@ class TEMPEST(nn.Module):
                     optimizer.step()
 
             nr_frames += t_batch.shape[0]
-
+            pbar.set_postfix({
+                'ELBO': f'{loss_elbo/nr_frames:.5f}',
+                'Recon': f'{loss_recon/nr_frames:.5f}',
+                'GP': f'{loss_gp/nr_frames:.5f}'
+            })
         return loss_elbo / nr_frames, loss_recon / nr_frames, \
             loss_gp / nr_frames
 
