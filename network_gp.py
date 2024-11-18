@@ -95,12 +95,16 @@ class GaussianLayer(nn.Module):
         super().__init__()
         self.mu = FeedForwardNN(layers_gaussian)
         self.var = FeedForwardNN(layers_gaussian)
-        self.var.add_layer('Softplus', nn.Softplus())
+
+    def _stabilize_variance(self, var):
+        return F.softplus(var) + 1e-6
 
     def forward(self, x):
         """Learns latent space and samples from learned Gaussian."""
         mu = self.mu(x)
-        variance = self.var(x)
+        variance = self._stabilize_variance(
+            self.var(x),
+        )
         z = _reparameterize(mu, variance)
         return mu, variance, z
 
@@ -321,13 +325,14 @@ class TEMPEST(nn.Module):
         Compare eg. Eq.(7) and (10) in Jazbec21.
         More details in Jazbec21 SI B, proposition B.1
         """
-        m = self.inducing_points.shape[0]
         log_det_kmm = _cholesky_log_determinant(self.kernel_mm)
         log_det_A = _cholesky_log_determinant(self.A_l)
-        KL_div = 0.5 * (-m + torch.trace(torch.matmul(
-            self.kernel_mm_inv,
-            self.A_l,
-        )) + torch.sum(self.mu_l * torch.matmul(
+        KL_div = 0.5 * (-self.inducing_points.shape[0] + torch.trace(
+            torch.matmul(
+                self.kernel_mm_inv,
+                self.A_l,
+            )
+        ) + torch.sum(self.mu_l * torch.matmul(
             self.kernel_mm_inv,
             self.mu_l,
         ) + log_det_kmm - log_det_A))
@@ -351,12 +356,20 @@ class TEMPEST(nn.Module):
             ),
         )
 
-        loss_L3 = - 0.5 * torch.sum(
-            torch.sum(k_iitilde) + torch.sum(tr_ALambda) +
-            torch.sum(torch.log(qzx_var)) + m *
-            torch.log(torch.tensor(2 * 3.1416, dtype=self.dtype)) +
+        loss_L3 = -0.5 * (
+            torch.sum(k_iitilde) +
+            torch.sum(tr_ALambda) +
+            torch.sum(torch.log(qzx_var)) +
+            qzx_mu.shape[0] * 1.8379 +
             torch.sum(precision * (qzx_mu - mean_vec)**2)
-        )  # this is the L3 loss from Hensman
+        )
+        # loss_L3 = - 0.5 * torch.sum(
+        #     k_iitilde +
+        #     tr_ALambda +
+        #     torch.log(qzx_var) +
+        #     m * 1.8379 +
+        #     precision * (qzx_mu - mean_vec)**2
+        # )  # this is the L3 loss from Hensman
         return loss_L3, KL_div
 
     def gp_step(self, x, t):
@@ -380,14 +393,17 @@ class TEMPEST(nn.Module):
             )
             loss_L3.append(l_L3)
             loss_KL.append(l_KL)
+        # print('loss kl', loss_KL)
         loss_L3 = torch.sum(torch.stack(loss_L3, dim=-1))
         loss_KL = torch.sum(torch.stack(loss_KL, dim=-1))
+        # print('L3', loss_L3, 'KL',  loss_KL, 'constant', (x.shape[0] / self.N_data))
         elbo_gp = loss_L3 - (x.shape[0] / self.N_data) * loss_KL
         gp_mean = torch.stack(gp_mean, dim=1)
         gp_var = torch.stack(gp_var, dim=1)
         gp_cross_entropy = torch.sum(
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
+        # print('CE', gp_cross_entropy, 'ELBO', elbo_gp)
         self.gp_KL = gp_cross_entropy - elbo_gp
         latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
         latent_samples = latent_dist.rsample()
@@ -525,11 +541,14 @@ class TEMPEST(nn.Module):
             dataset,
             batch_size=batch_size,
             shuffle=False,
+            drop_last=False,
         )
         for x_batch, t_batch in dataloader:
             x_batch = x_batch.clone().detach().to(self.device)
             t_batch = t_batch.clone().detach().to(self.device)
+
             qzx = self.encoder(x_batch)
+            self.compute_kernel_matrices(t_batch)
             qzx_mu = qzx['means']
             qzx_var = qzx['variances']
             gp_mean, gp_var = [], []
