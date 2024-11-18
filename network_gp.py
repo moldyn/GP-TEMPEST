@@ -362,14 +362,7 @@ class TEMPEST(nn.Module):
             torch.sum(torch.log(qzx_var)) +
             qzx_mu.shape[0] * 1.8379 +
             torch.sum(precision * (qzx_mu - mean_vec)**2)
-        )
-        # loss_L3 = - 0.5 * torch.sum(
-        #     k_iitilde +
-        #     tr_ALambda +
-        #     torch.log(qzx_var) +
-        #     m * 1.8379 +
-        #     precision * (qzx_mu - mean_vec)**2
-        # )  # this is the L3 loss from Hensman
+        )  # this is the L3 loss from Hensman
         return loss_L3, KL_div
 
     def gp_step(self, x, t):
@@ -411,7 +404,7 @@ class TEMPEST(nn.Module):
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = loss_L2(qxz, x)
+        self.recon_loss = loss_L2(qxz, x) * 1e6
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
