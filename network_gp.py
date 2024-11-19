@@ -433,7 +433,6 @@ class TEMPEST(nn.Module):
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            # drop_last=False,  # to do?
         )
         test_loader = DataLoader(
             test_dataset,
@@ -445,11 +444,6 @@ class TEMPEST(nn.Module):
            lr=learning_rate,
            weight_decay=weight_decay,
         )
-        # optimizer = torch.optim.Adam(
-            # self.parameters(),
-            # lr=learning_rate,
-            # weight_decay=weight_decay,
-        # )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             'min',
