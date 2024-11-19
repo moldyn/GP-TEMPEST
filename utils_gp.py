@@ -96,6 +96,25 @@ def yaml_config_reader(config: str):
     """Parse all parameters using the yaml file."""
     with open(config, 'r') as stream:
         params = yaml.safe_load(stream)
+
+    # Create header string with all parameters for reproducibility
+    header = (
+        "# Configuration Parameters:\n"
+        f"# data_path: {params.get('data_path')}\n"
+        f"# inducing_points_path: {params.get('inducing_points_path')}\n"
+        f"# save_path: {params.get('save_path')}\n"
+        f"# cuda: {params.get('cuda')}\n"
+        f"# dim_input: {params.get('dim_input')}\n"
+        f"# dim_latent: {params.get('dim_latent')}\n"
+        f"# neurons_ae: {params.get('neurons_ae')}\n"
+        f"# epochs: {params.get('epochs')}\n"
+        f"# batch_size: {params.get('batch_size')}\n"
+        f"# learning_rate: {params.get('learning_rate')}\n"
+        f"# weight_decay: {params.get('weight_decay')}\n"
+        f"# beta: {params.get('beta')}\n"
+        f"# kernel_nu: {params.get('kernel_nu')}\n"
+        f"# kernel_scale: {params.get('kernel_scale')}"
+    )
     return (
         params.get('data_path'),
         params.get('inducing_points_path'),
@@ -111,6 +130,7 @@ def yaml_config_reader(config: str):
         float(params.get('beta')),
         float(params.get('kernel_nu')),
         float(params.get('kernel_scale')),
+        header,
     )
 
 

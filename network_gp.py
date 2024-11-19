@@ -460,7 +460,7 @@ class TEMPEST(nn.Module):
         for nr_epoch in epoch_pbar:
             train_pbar = tqdm(
                 train_loader,
-                desc=f'Epoch {nr_epoch} (train)',
+                desc=f'Epoch {nr_epoch + 1} (train)',
                 leave=False,
             )
             l_train_elbo, l_train_recon, l_train_gp = self.train_epoch(
@@ -480,13 +480,6 @@ class TEMPEST(nn.Module):
                 'Val ELBO': f'{l_test_elbo:.5f}',
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
-            # print(
-                # f'Epoch {nr_epoch}: ELBO | {l_train_elbo:.5f}, '
-                # f'Recon Loss {l_train_recon:.5f}, '
-                # f'GP Loss {l_train_gp:.5f} | ',
-                # f'Val ELBO | {l_test_elbo:.5f}, Val Recon {l_test_recon:.5f}, '
-                # f'Val GP Loss {l_test_gp:.5f}',
-            # )
         torch.save(self.state_dict(), 'model.pt')
 
     def train_epoch(self, pbar, optimizer, is_training=True):
