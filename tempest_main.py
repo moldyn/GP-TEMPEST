@@ -34,7 +34,10 @@ def main(config, generate_config):
         weight_decay, beta, kernel_nu, kernel_scale, header,
     ) = utils_gp.yaml_config_reader(config)
 
-    basename_save = f'neps_{epochs}_bs_{batch_size}_lr_{learning_rate}_wd_{weight_decay}_b_{beta}_nu_{kernel_nu}_scale_{kernel_scale}'
+    basename_save = (
+        f'neps_{epochs}_bs_{batch_size}_lr_{learning_rate}_wd_{weight_decay}'
+        f'_b_{beta}_nu_{kernel_nu}_scale_{kernel_scale:.0f}'
+    )
 
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
@@ -64,16 +67,17 @@ def main(config, generate_config):
         dtype=dtype,
     )
     print(tempest)
+    print(header)
     tempest.train_model(
         dataset, train_size, learning_rate, weight_decay, batch_size, epochs,
     )
     embedding = tempest.extract_latent_space(dataset, batch_size)
-    utils_gp.plot_latent_space(
-        embedding,
-        f'{save_path}/embedding_{basename_save}.png',
-    )
+    # utils_gp.plot_latent_space(
+    #     embedding,
+    #     f'{save_path}/embedding_{basename_save}.png',
+    # )
     np.savetxt(
-        f'{save_path}/embedding{basename_save}.dat',
+        f'{save_path}/embedding_{basename_save}.dat',
         embedding,
         header=header,
         comments='#',

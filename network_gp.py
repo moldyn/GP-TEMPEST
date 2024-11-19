@@ -509,7 +509,7 @@ class TEMPEST(nn.Module):
                 loss_recon += self.recon_loss.item()
                 loss_gp += self.gp_KL.item()
                 if is_training:
-                    self.elbo.backward()  # Backpropagation; removed retain_graph=True in order to save memory
+                    self.elbo.backward()  # removed retain_graph=True in order to save memory
                     optimizer.step()
 
             nr_frames += t_batch.shape[0]

@@ -99,7 +99,7 @@ def yaml_config_reader(config: str):
 
     # Create header string with all parameters for reproducibility
     header = (
-        "# Configuration Parameters:\n"
+        "# TEMPEST model configuration Parameters:\n"
         f"# data_path: {params.get('data_path')}\n"
         f"# inducing_points_path: {params.get('inducing_points_path')}\n"
         f"# save_path: {params.get('save_path')}\n"
