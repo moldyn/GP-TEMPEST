@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm.auto import tqdm, trange
 
 
-def _num_stabilize_diag(mat, stabilizer=1e-6):
+def _num_stabilize_diag(mat, stabilizer=1e-8):
     diag = torch.eye(mat.size(-1), device=mat.device).expand(mat.shape)
     return mat + stabilizer * diag
 
@@ -134,7 +134,7 @@ class InferenceNN(nn.Module):
 
 
 class MaternKernel(nn.Module):
-    def __init__(self, scale=1, nu=1.5, dtype=torch.float64):
+    def __init__(self, scale, nu, dtype):
         super(MaternKernel, self).__init__()
         self.scale = torch.tensor([scale])
         self.device = self.scale.device
@@ -222,15 +222,6 @@ class TEMPEST(nn.Module):
         self.decoder.add_layer('sigmoid', nn.Sigmoid())
         self.beta = beta
         self.N_data = N_data
-        # self.init_weights()
-
-    # def init_weights(self):
-    #     def _init_weights(m):
-    #         if isinstance(m, nn.Linear):
-    #             nn.init.xavier_uniform_(m.weight)
-    #             nn.init.constant_(m.bias, -1.0)
-    #     self.encoder.apply(_init_weights)
-    #     self.decoder.apply(_init_weights)
 
     def compute_kernel_matrices(self, t):
         self.kernel_mm = self.kernel.kernel_mat(
@@ -401,7 +392,7 @@ class TEMPEST(nn.Module):
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = loss_L2(qxz, x) * 1e6
+        self.recon_loss = loss_L2(qxz, x) * 1e3
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
@@ -423,34 +414,26 @@ class TEMPEST(nn.Module):
                 batch sizes > 512
             n_epochs (int): number of epochs to train
         """
-        len_dataset = len(dataset)
-        train_size_samples = int(len_dataset * train_size)
-        train_dataset, test_dataset = random_split(
+        train_dataset = dataset if train_size == 1 else random_split(
             dataset=dataset,
-            lengths=[train_size_samples, len_dataset - train_size_samples],
-        )
+            lengths=[
+                int(len(dataset) * train_size),
+                len(dataset) - int(len(dataset) * train_size)
+            ]
+        )[0]
         train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=batch_size,
-            shuffle=False,
+            train_dataset, batch_size=batch_size, shuffle=True,
         )
         optimizer = torch.optim.AdamW(
-           filter(lambda p: p.requires_grad, self.parameters()),
-           lr=learning_rate,
-           weight_decay=weight_decay,
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=learning_rate,
+            weight_decay=weight_decay,
         )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            'min',
-            patience=10,
+            optimizer, 'min', patience=10,
         )
 
-        epoch_pbar = trange(n_epochs, desc='Training')  # tqdm for ETA
+        epoch_pbar = trange(n_epochs, desc='Training')
         for nr_epoch in epoch_pbar:
             train_pbar = tqdm(
                 train_loader,
@@ -458,20 +441,11 @@ class TEMPEST(nn.Module):
                 leave=False,
             )
             l_train_elbo, l_train_recon, l_train_gp = self.train_epoch(
-                train_pbar, optimizer, is_training=True,
+                train_pbar, optimizer, is_training=True
             )
             scheduler.step(l_train_elbo)
-            test_pbar = tqdm(
-                test_loader,
-                desc=f'Epoch {nr_epoch} (test)',
-                leave=False,
-            )
-            l_test_elbo, l_test_recon, l_test_gp = self.train_epoch(
-                test_pbar, optimizer, is_training=False,
-            )
             epoch_pbar.set_postfix({
                 'Train ELBO': f'{l_train_elbo:.5f}',
-                'Val ELBO': f'{l_test_elbo:.5f}',
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
         torch.save(self.state_dict(), 'model.pt')

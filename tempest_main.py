@@ -28,11 +28,11 @@ def main(config, generate_config):
         sys.exit()
     out_file = config.split('.')[0]
 
-    (
-        data_path, inducing_points_path, save_path, cuda, dim_input,
+    (data_path, inducing_points_path, save_path, cuda, dim_input,
         dim_latent, layers_hidden, epochs, batch_size, learning_rate,
-        weight_decay, beta, kernel_nu, kernel_scale, header,
-    ) = utils_gp.yaml_config_reader(config)
+        weight_decay, beta, kernel_nu, kernel_scale, header) = \
+        utils_gp.yaml_config_reader(config)
+    print(header)
 
     basename_save = (
         f'neps_{epochs}_bs_{batch_size}_lr_{learning_rate}_wd_{weight_decay}'
@@ -47,7 +47,7 @@ def main(config, generate_config):
     dataset = utils_gp.load_prepare_data(data_path, dtype)
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
-    train_size = 0.9
+    train_size = 1
 
     kernel = MaternKernel(
         nu=kernel_nu,
@@ -66,11 +66,18 @@ def main(config, generate_config):
         N_data=N_data_points,
         dtype=dtype,
     )
-    print(tempest)
-    print(header)
-    tempest.train_model(
-        dataset, train_size, learning_rate, weight_decay, batch_size, epochs,
-    )
+    model_path = f'{save_path}/model_{basename_save}.pt'
+    if os.path.exists(model_path):
+        tempest.load_state_dict(torch.load(model_path))
+        print(f'Loaded already trained model from {model_path}')
+    else:
+        print(tempest)
+        tempest.train_model(
+            dataset, train_size, learning_rate, weight_decay, batch_size,
+            epochs,
+        )
+        torch.save(tempest.state_dict(), model_path)
+
     embedding = tempest.extract_latent_space(dataset, batch_size)
     # utils_gp.plot_latent_space(
     #     embedding,
