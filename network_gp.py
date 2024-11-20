@@ -392,7 +392,7 @@ class TEMPEST(nn.Module):
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = loss_L2(qxz, x) * 1e3
+        self.recon_loss = loss_L2(qxz, x) * 1e5
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
@@ -448,7 +448,6 @@ class TEMPEST(nn.Module):
                 'Train ELBO': f'{l_train_elbo:.5f}',
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
-        torch.save(self.state_dict(), 'model.pt')
 
     def train_epoch(self, pbar, optimizer, is_training=True):
         """Train the model for one epoch.
