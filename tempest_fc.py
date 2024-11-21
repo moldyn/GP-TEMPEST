@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -392,7 +393,7 @@ class TEMPEST(nn.Module):
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = loss_L2(qxz, x) * 1e5
+        self.recon_loss = loss_L2(qxz, x) * 1e6
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
@@ -432,6 +433,7 @@ class TEMPEST(nn.Module):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, 'min', patience=10,
         )
+        embeddings_per_epoch = []
 
         epoch_pbar = trange(n_epochs, desc='Training')
         for nr_epoch in epoch_pbar:
@@ -448,6 +450,14 @@ class TEMPEST(nn.Module):
                 'Train ELBO': f'{l_train_elbo:.5f}',
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
+            with torch.no_grad():
+                embeddings_per_epoch.append(
+                    self.extract_latent_space(train_dataset, batch_size)
+                )
+                np.savetxt(
+                    f'/data/evaluation/autoencoder/GraphAutoencoder/own_code/GP-TEMPEST/embeddings_epochs/epoch_{nr_epoch}.dat',
+                    embeddings_per_epoch[-1],
+                )
 
     def train_epoch(self, pbar, optimizer, is_training=True):
         """Train the model for one epoch.
