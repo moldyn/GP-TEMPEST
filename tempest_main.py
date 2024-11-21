@@ -1,12 +1,12 @@
 import os
+import subprocess
 import sys
 
 import click
 import numpy as np
+import tempest_utils
 import torch
-
-import utils_gp
-from network_gp import TEMPEST, MaternKernel
+from tempest_fc import TEMPEST, MaternKernel
 
 
 @click.command(no_args_is_help=True)
@@ -23,7 +23,7 @@ from network_gp import TEMPEST, MaternKernel
 def main(config, generate_config):
     """Run TEMPEST dimensionality reduction."""
     if generate_config:
-        out_file = utils_gp.generate_yaml_config('default_tempest_config.yaml')
+        out_file = tempest_utils.generate_yaml_config('default_tempest_config.yaml')
         print(f'created a new config file {out_file}.')
         sys.exit()
     out_file = config.split('.')[0]
@@ -31,7 +31,7 @@ def main(config, generate_config):
     (data_path, inducing_points_path, save_path, cuda, dim_input,
         dim_latent, layers_hidden, epochs, batch_size, learning_rate,
         weight_decay, beta, kernel_nu, kernel_scale, header) = \
-        utils_gp.yaml_config_reader(config)
+        tempest_utils.yaml_config_reader(config)
     print(header)
 
     basename_save = (
@@ -44,7 +44,7 @@ def main(config, generate_config):
     torch.autograd.set_detect_anomaly(True)
     dtype = torch.float64
 
-    dataset = utils_gp.load_prepare_data(data_path, dtype)
+    dataset = tempest_utils.load_prepare_data(data_path, dtype)
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
     train_size = 1
@@ -79,10 +79,6 @@ def main(config, generate_config):
         torch.save(tempest.state_dict(), model_path)
 
     embedding = tempest.extract_latent_space(dataset, batch_size)
-    # utils_gp.plot_latent_space(
-    #     embedding,
-    #     f'{save_path}/embedding_{basename_save}.png',
-    # )
     np.savetxt(
         f'{save_path}/embedding_{basename_save}.dat',
         embedding,
@@ -90,6 +86,15 @@ def main(config, generate_config):
         comments='#',
         fmt='%.4f',
     )
+    traj_original = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_original.dat"
+    traj_transformed = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_transformed.dat"
+    subprocess.run([
+        "python3",
+        "./test_run/plot_clusters_toymodel.py",
+        "--traj_original", traj_original,
+        "--traj_transformed", traj_transformed,
+        "--traj_embedding", f'{save_path}/embedding_{basename_save}.dat',
+    ])
 
 
 if __name__ == '__main__':
