@@ -36,7 +36,7 @@ def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
 
 class FeedForwardNN(nn.Module):
     """Simple linear NN with LeakyReLU activation."""
-    def __init__(self, layer_sizes):
+    def __init__(self, layer_sizes, linear=False):
         super().__init__()
         # Check if layer_sizes is a list of integers
         assert isinstance(layer_sizes, list), (
@@ -52,7 +52,8 @@ class FeedForwardNN(nn.Module):
             )
             if layer_nr < len(layer_sizes) - 2:
                 layers.append(nn.BatchNorm1d(layer_sizes[layer_nr + 1]))
-                layers.append(nn.LeakyReLU())
+                if not linear:
+                    layers.append(nn.LeakyReLU())
         self.model = nn.Sequential(*layers)
 
     def add_layer(self, name, layer):
@@ -219,7 +220,8 @@ class TEMPEST(nn.Module):
             self.layers_encoder,
             layers_gaussian=[layers_hidden_encoder[-1], dim_latent],
         ).to(self.device).to(self.dtype)
-        self.decoder = FeedForwardNN(self.layers_decoder).to(self.device).to(self.dtype)
+        self.decoder = FeedForwardNN(
+            self.layers_decoder, linear=False).to(self.device).to(self.dtype)
         self.decoder.add_layer('sigmoid', nn.Sigmoid())
         self.beta = beta
         self.N_data = N_data
@@ -454,10 +456,11 @@ class TEMPEST(nn.Module):
                 embeddings_per_epoch.append(
                     self.extract_latent_space(train_dataset, batch_size)
                 )
-                np.savetxt(
-                    f'/data/evaluation/autoencoder/GraphAutoencoder/own_code/GP-TEMPEST/embeddings_epochs/epoch_{nr_epoch}.dat',
-                    embeddings_per_epoch[-1],
-                )
+                # np.savetxt(
+                    # f'/data/evaluation/autoencoder/GraphAutoencoder/own_code/GP-TEMPEST/embeddings_epochs_linear/epoch_{nr_epoch}.dat',
+                    # embeddings_per_epoch[-1],
+                    # fmt='%.4f',
+                # )
 
     def train_epoch(self, pbar, optimizer, is_training=True):
         """Train the model for one epoch.
