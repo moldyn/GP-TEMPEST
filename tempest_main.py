@@ -4,8 +4,9 @@ import sys
 
 import click
 import numpy as np
-import tempest_utils
 import torch
+
+import tempest_utils
 from tempest_fc import TEMPEST, MaternKernel
 
 
@@ -36,7 +37,8 @@ def main(config, generate_config):
 
     basename_save = (
         f'neps_{epochs}_bs_{batch_size}_lr_{learning_rate}_wd_{weight_decay}'
-        f'_b_{beta}_nu_{kernel_nu}_scale_{kernel_scale:.0f}'
+        f'_b_{beta}_nu_{kernel_nu}_scale_{kernel_scale:.0f}_'
+        f'hidden_{"_".join(map(str, layers_hidden))}'
     )
 
     torch.manual_seed(0)
