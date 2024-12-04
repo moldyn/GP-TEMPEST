@@ -35,6 +35,7 @@ def load_prepare_data(input, dtype):
         torch.tensor(normalized_features, dtype=dtype),
         torch.tensor(normalized_times, dtype=dtype),
     )
+    print('DSFJLKDFLSJKF', scale_factor.dtype)
     return dataset, scale_factor
 
 

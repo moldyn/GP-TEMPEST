@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -138,7 +137,7 @@ class InferenceNN(nn.Module):
 class MaternKernel(nn.Module):
     def __init__(self, scale, nu, dtype):
         super(MaternKernel, self).__init__()
-        self.scale = torch.tensor([scale])
+        self.scale = torch.tensor([scale], dtype=dtype)
         self.device = self.scale.device
         self.dtype = dtype
         self.nu = nu
@@ -168,8 +167,8 @@ class MaternKernel(nn.Module):
         return prefac * exp_component
 
     def kernel_mat(self, t1, t2):
-        t1 = t1.clone().detach().to(self.device)
-        t2 = t2.clone().detach().to(self.device)
+        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
+        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
         mean = t1.mean(dim=-2, keepdim=True)  # only one mean to ensure consistent scaling between t1 and t2
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
@@ -177,8 +176,8 @@ class MaternKernel(nn.Module):
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
-        t1 = t1.clone().detach().to(self.device)
-        t2 = t2.clone().detach().to(self.device)
+        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
+        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
         mean = t1.mean(dim=-1, keepdim=True).unsqueeze(1)
         t1_s = (t1 - mean) / self.scale
         t2_s = (t2 - mean) / self.scale
