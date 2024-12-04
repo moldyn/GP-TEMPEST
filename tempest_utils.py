@@ -28,10 +28,14 @@ def load_prepare_data(input, dtype):
     scaler = MinMaxScaler()
     features = np.loadtxt(input)
     times = np.arange(len(features)).reshape(-1, 1)
-    return TensorDataset(
-        torch.tensor(scaler.fit_transform(features), dtype=dtype),
-        torch.tensor(times, dtype=dtype),
+    scale_factor = np.max(times) - np.min(times)
+    normalized_times = scaler.fit_transform(times)
+    normalized_features = scaler.fit_transform(features)
+    dataset = TensorDataset(
+        torch.tensor(normalized_features, dtype=dtype),
+        torch.tensor(normalized_times, dtype=dtype),
     )
+    return dataset, scale_factor
 
 
 def _gaussian_decay(d, a=1.2):
@@ -70,6 +74,12 @@ def load_prepare_graphs(
         edge_attr = torch.tensor(
             _gaussian_decay(valid_contact_distances), dtype=dtype,
         ).view(-1, 1)
+        # print(f"Graph {num}:")
+        # print(f"  node_features shape: {node_features[num].shape}")
+        # print(f"  edge_index shape: {edge_index.shape}")
+        # print(f"  edge_attr shape: {edge_attr.shape}")
+        # print(f"  mask shape: {mask.shape}")
+        # print(f"  times shape: {times[num].shape}")
         data = Data(
             x=node_features[num],
             edge_index=edge_index,

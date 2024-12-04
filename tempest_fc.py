@@ -53,7 +53,7 @@ class FeedForwardNN(nn.Module):
             if layer_nr < len(layer_sizes) - 2:
                 layers.append(nn.BatchNorm1d(layer_sizes[layer_nr + 1]))
                 if not linear:
-                    layers.append(nn.LeakyReLU())
+                    layers.append(nn.ELU())
         self.model = nn.Sequential(*layers)
 
     def add_layer(self, name, layer):
@@ -120,7 +120,7 @@ class InferenceNN(nn.Module):
     ):
         super().__init__()
         self.inference_qzx = FeedForwardNN(layers_encoder)
-        self.inference_qzx.add_layer('LeakyRELU', nn.LeakyReLU())
+        self.inference_qzx.add_layer('LeakyRELU', nn.ELU())
         self.inference_qzx.add_layer(
             'GaussianLayer', GaussianLayer(layers_gaussian),
         )
@@ -389,13 +389,13 @@ class TEMPEST(nn.Module):
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
         self.gp_KL = gp_cross_entropy - elbo_gp
-        latent_dist = Normal(qzx_mu, torch.sqrt(qzx_var))  # todo: sqrt ja oder nein?
+        latent_dist = Normal(qzx_mu, qzx_var)  # todo: sqrt ja oder nein?
         latent_samples = latent_dist.rsample()
 
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
-        loss_L2 = nn.MSELoss(reduction='mean')
-        self.recon_loss = loss_L2(qxz, x) * 1e6
+        loss_L2 = nn.MSELoss(reduction='sum')
+        self.recon_loss = loss_L2(qxz, x)
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(

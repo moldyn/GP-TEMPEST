@@ -35,10 +35,11 @@ def main(config, generate_config):
         tempest_utils.yaml_config_reader(config)
     print(header)
 
+    ind_points = inducing_points_path.split('/')[-1].split('.')[0]
     basename_save = (
         f'neps_{epochs}_bs_{batch_size}_lr_{learning_rate}_wd_{weight_decay}'
         f'_b_{beta}_nu_{kernel_nu}_scale_{kernel_scale:.0f}_'
-        f'hidden_{"_".join(map(str, layers_hidden))}'
+        f'hidden_{"_".join(map(str, layers_hidden))}_ind_points_{ind_points}_'
     )
 
     torch.manual_seed(0)
@@ -46,14 +47,16 @@ def main(config, generate_config):
     torch.autograd.set_detect_anomaly(True)
     dtype = torch.float64
 
-    dataset = tempest_utils.load_prepare_data(data_path, dtype)
+    dataset, scale_factor = tempest_utils.load_prepare_data(data_path, dtype)
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
     train_size = 1
+    adjusted_kernel_scale = kernel_scale / scale_factor
+    adjusted_inducing_points = inducing_points / scale_factor
 
     kernel = MaternKernel(
         nu=kernel_nu,
-        scale=kernel_scale,
+        scale=adjusted_kernel_scale,
         dtype=dtype,
     )
     tempest = TEMPEST(
@@ -63,7 +66,7 @@ def main(config, generate_config):
         dim_latent=dim_latent,
         layers_hidden_encoder=layers_hidden,
         layers_hidden_decoder=layers_hidden[::-1],
-        inducing_points=inducing_points,
+        inducing_points=adjusted_inducing_points,
         beta=beta,
         N_data=N_data_points,
         dtype=dtype,
@@ -88,6 +91,7 @@ def main(config, generate_config):
         comments='#',
         fmt='%.4f',
     )
+
     traj_original = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_original.dat"
     traj_transformed = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_transformed.dat"
     subprocess.run([
