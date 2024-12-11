@@ -27,16 +27,13 @@ def load_prepare_data(input, dtype):
     """Load and prepare the data. Returns a TensorDataset."""
     scaler = MinMaxScaler()
     features = np.loadtxt(input)
-    times = np.arange(len(features)).reshape(-1, 1)
-    scale_factor = np.max(times) - np.min(times)
-    normalized_times = scaler.fit_transform(times)
     normalized_features = scaler.fit_transform(features)
+    times = np.arange(len(features)).reshape(-1, 1)
     dataset = TensorDataset(
         torch.tensor(normalized_features, dtype=dtype),
-        torch.tensor(normalized_times, dtype=dtype),
+        torch.tensor(times, dtype=dtype),
     )
-    print('DSFJLKDFLSJKF', scale_factor.dtype)
-    return dataset, scale_factor
+    return dataset
 
 
 def _gaussian_decay(d, a=1.2):

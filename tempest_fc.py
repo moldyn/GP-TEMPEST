@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.preprocessing import MinMaxScaler
 from torch.distributions.normal import Normal
 from torch.utils.data import DataLoader, random_split
 from tqdm.auto import tqdm, trange
@@ -166,21 +167,21 @@ class MaternKernel(nn.Module):
             ) * distance).add(1).add(5.0 / 3.0 * distance**2)
         return prefac * exp_component
 
+    def _scale_times(self, t1, t2):
+        # scale the times with the user defined scaling factor
+        # subtract one mean to guarantee that the times are not shifted
+        mean = t1.mean(dim=-2, keepdim=True)
+        t1s = t1.sub(mean).div_(self.scale)
+        t2s = t2.sub(mean).div_(self.scale)
+        return t1s, t2s
+
     def kernel_mat(self, t1, t2):
-        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
-        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
-        mean = t1.mean(dim=-2, keepdim=True)  # only one mean to ensure consistent scaling between t1 and t2
-        t1_s = (t1 - mean) / self.scale
-        t2_s = (t2 - mean) / self.scale
+        t1_s, t2_s = self._scale_times(t1, t2)
         distance = torch.cdist(t1_s, t2_s)
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
-        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
-        t1 = t1.clone().detach().to(self.device, dtype=self.dtype)
-        mean = t1.mean(dim=-1, keepdim=True).unsqueeze(1)
-        t1_s = (t1 - mean) / self.scale
-        t2_s = (t2 - mean) / self.scale
+        t1_s, t2_s = self._scale_times(t1, t2)
         distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt()
         return self._compute_kernel(distance).squeeze()
 
@@ -217,7 +218,11 @@ class TEMPEST(nn.Module):
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(
             self.layers_encoder,
-            layers_gaussian=[layers_hidden_encoder[-1], dim_latent],
+            layers_gaussian=[
+                layers_hidden_encoder[-1],
+                int(layers_hidden_encoder[-1]),
+                dim_latent,
+            ],
         ).to(self.device).to(self.dtype)
         self.decoder = FeedForwardNN(
             self.layers_decoder, linear=False).to(self.device).to(self.dtype)
@@ -393,8 +398,8 @@ class TEMPEST(nn.Module):
 
         # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
-        loss_L2 = nn.MSELoss(reduction='sum')
-        self.recon_loss = loss_L2(qxz, x)
+        loss_L2 = nn.MSELoss(reduction='mean')
+        self.recon_loss = loss_L2(qxz, x) * 1e6
         self.elbo = self.recon_loss + self.beta * self.gp_KL
 
     def train_model(
