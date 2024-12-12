@@ -97,16 +97,12 @@ class GaussianLayer(nn.Module):
         super().__init__()
         self.mu = FeedForwardNN(layers_gaussian)
         self.var = FeedForwardNN(layers_gaussian)
-
-    def _stabilize_variance(self, var):
-        return F.softplus(var) + 1e-6
+        self.var.add_layer('softplus', nn.Softplus())
 
     def forward(self, x):
         """Learns latent space and samples from learned Gaussian."""
         mu = self.mu(x)
-        variance = self._stabilize_variance(
-            self.var(x),
-        )
+        variance = self.var(x)
         z = _reparameterize(mu, variance)
         return mu, variance, z
 
@@ -120,7 +116,10 @@ class InferenceNN(nn.Module):
     ):
         super().__init__()
         self.inference_qzx = FeedForwardNN(layers_encoder)
-        self.inference_qzx.add_layer('LeakyRELU', nn.ELU())
+        self.inference_qzx.add_layer(
+            'batchnorm', nn.BatchNorm1d(layers_encoder[-1]),
+        )
+        self.inference_qzx.add_layer('ELU', nn.ELU())
         self.inference_qzx.add_layer(
             'GaussianLayer', GaussianLayer(layers_gaussian),
         )
@@ -218,11 +217,7 @@ class TEMPEST(nn.Module):
         self.layers_decoder = [dim_latent, *layers_hidden_decoder, dim_input]
         self.encoder = InferenceNN(
             self.layers_encoder,
-            layers_gaussian=[
-                layers_hidden_encoder[-1],
-                int(layers_hidden_encoder[-1]),
-                dim_latent,
-            ],
+            layers_gaussian=[layers_hidden_encoder[-1], dim_latent],
         ).to(self.device).to(self.dtype)
         self.decoder = FeedForwardNN(
             self.layers_decoder, linear=False).to(self.device).to(self.dtype)
@@ -333,7 +328,7 @@ class TEMPEST(nn.Module):
         ) + torch.sum(self.mu_l * torch.matmul(
             self.kernel_mm_inv,
             self.mu_l,
-        ) + log_det_kmm - log_det_A))
+        )) + log_det_kmm - log_det_A)
 
         # compute L3 sum term
         mean_vec = torch.matmul(

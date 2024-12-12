@@ -23,6 +23,14 @@ from torch_geometric.loader import DataLoader
 pplt.use_style()
 
 
+def create_deterministic_loader(batch_size, input_dim, num_samples, seed=42):
+    torch.manual_seed(seed)
+    features = torch.randn(num_samples, input_dim, dtype=torch.float64)
+    times = torch.linspace(0, 1, num_samples, dtype=torch.float64).unsqueeze(-1)
+    dataset = TensorDataset(features, times)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+
 def load_prepare_data(input, dtype):
     """Load and prepare the data. Returns a TensorDataset."""
     scaler = MinMaxScaler()
