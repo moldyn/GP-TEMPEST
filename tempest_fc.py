@@ -309,8 +309,7 @@ class TEMPEST(nn.Module):
                     self.kernel_mn,
                 )
             )
-        )
-        # GP_mean_vector and GP_mean_sigma is updated posterior, while mu_l and A_l acts more like a prior (compare eq 9 in Tian24)
+        ) # GP_mean_vector and GP_mean_sigma is updated posterior, while mu_l and A_l acts more like a prior (compare eq 9 in Tian24)
 
     def variational_loss(self, qzx_mu, qzx_var):
         """
@@ -329,7 +328,6 @@ class TEMPEST(nn.Module):
             self.kernel_mm_inv,
             self.mu_l,
         )) + log_det_kmm - log_det_A)
-
         # compute L3 sum term
         mean_vec = torch.matmul(
             self.kernel_nm,
@@ -348,7 +346,6 @@ class TEMPEST(nn.Module):
                 Lambda,
             ),
         )
-
         loss_L3 = -0.5 * (
             torch.sum(k_iitilde) +
             torch.sum(tr_ALambda) +
@@ -390,8 +387,6 @@ class TEMPEST(nn.Module):
         self.gp_KL = gp_cross_entropy - elbo_gp
         latent_dist = Normal(qzx_mu, qzx_var)  # todo: sqrt ja oder nein?
         latent_samples = latent_dist.rsample()
-
-        # decode and reconstruction loss
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
         self.recon_loss = loss_L2(qxz, x) * 1e6
@@ -434,8 +429,6 @@ class TEMPEST(nn.Module):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, 'min', patience=10,
         )
-        embeddings_per_epoch = []
-
         epoch_pbar = trange(n_epochs, desc='Training')
         for nr_epoch in epoch_pbar:
             train_pbar = tqdm(
@@ -451,15 +444,6 @@ class TEMPEST(nn.Module):
                 'Train ELBO': f'{l_train_elbo:.5f}',
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
-            with torch.no_grad():
-                embeddings_per_epoch.append(
-                    self.extract_latent_space(train_dataset, batch_size)
-                )
-                # np.savetxt(
-                    # f'/data/evaluation/autoencoder/GraphAutoencoder/own_code/GP-TEMPEST/embeddings_epochs_linear/epoch_{nr_epoch}.dat',
-                    # embeddings_per_epoch[-1],
-                    # fmt='%.4f',
-                # )
 
     def train_epoch(self, pbar, optimizer, is_training=True):
         """Train the model for one epoch.
@@ -532,4 +516,3 @@ class TEMPEST(nn.Module):
             latent_samples_batch = _reparameterize(gp_mean, gp_var)
             latent_samples.append(latent_samples_batch.detach().cpu())
         return torch.cat(latent_samples, dim=0)
-
