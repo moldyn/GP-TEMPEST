@@ -43,30 +43,8 @@ def main(config, generate_config):
         f'hidden_{"_".join(map(str, layers_hidden))}_ind_points_{ind_points}'
     )
 
-    """
-    def set_seed(seed=42):
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    set_seed(42)
-    def initialize_weights(model):
-        for module in model.modules():
-            if isinstance(module, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)  # Xavier initialization
-                if module.bias is not None:
-                    torch.nn.init.zeros_(module.bias)
-            elif isinstance(module, torch.nn.BatchNorm1d):
-                torch.nn.init.ones_(module.weight)
-                torch.nn.init.zeros_(module.bias)
-    """
-
-    # torch.manual_seed(42)
-    # torch.cuda.manual_seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
     torch.autograd.set_detect_anomaly(True)
     dtype = torch.float64
 
@@ -74,9 +52,6 @@ def main(config, generate_config):
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
     train_size = 1
-    # adjusted_kernel_scale = kernel_scale / scale_factor adjusted_inducing_points = inducing_points / scale_factor
-    # print(f'Adjusted kernel scale: {adjusted_kernel_scale}')
-    # print(f'Adjusted inducing points: {adjusted_inducing_points}')
 
     kernel = MaternKernel(
         nu=kernel_nu,
