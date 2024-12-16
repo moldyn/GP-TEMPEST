@@ -53,7 +53,7 @@ class FeedForwardNN(nn.Module):
             if layer_nr < len(layer_sizes) - 2:
                 layers.append(nn.BatchNorm1d(layer_sizes[layer_nr + 1]))
                 if not linear:
-                    layers.append(nn.ELU())
+                    layers.append(nn.LeakyReLU())
         self.model = nn.Sequential(*layers)
 
     def add_layer(self, name, layer):
@@ -119,7 +119,7 @@ class InferenceNN(nn.Module):
         self.inference_qzx.add_layer(
             'batchnorm', nn.BatchNorm1d(layers_encoder[-1]),
         )
-        self.inference_qzx.add_layer('ELU', nn.ELU())
+        self.inference_qzx.add_layer('LeakyReLU', nn.LeakyReLU())
         self.inference_qzx.add_layer(
             'GaussianLayer', GaussianLayer(layers_gaussian),
         )
