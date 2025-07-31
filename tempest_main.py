@@ -25,7 +25,9 @@ from tempest_fc import TEMPEST, MaternKernel
 def main(config, generate_config):
     """Run TEMPEST dimensionality reduction."""
     if generate_config:
-        out_file = tempest_utils.generate_yaml_config('default_tempest_config.yaml')
+        out_file = tempest_utils.generate_yaml_config(
+            'default_tempest_config.yaml',
+        )
         print(f'created a new config file {out_file}.')
         sys.exit()
     out_file = config.split('.')[0]
@@ -70,7 +72,6 @@ def main(config, generate_config):
         N_data=N_data_points,
         dtype=dtype,
     )
-    # initialize_weights(tempest)
     model_path = f'{save_path}/model_{basename_save}.pt'
     if os.path.exists(model_path):
         tempest.load_state_dict(torch.load(model_path))
@@ -91,17 +92,6 @@ def main(config, generate_config):
         comments='#',
         fmt='%.4f',
     )
-
-    traj_original = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_original.dat"
-    traj_transformed = "/data/evaluation/autoencoder/GraphAutoencoder/toy_model_GP/v4/traj_v4_transformed.dat"
-    subprocess.run([
-        "python3",
-        "plot_clusters_toymodel.py",
-        "--traj_original", traj_original,
-        "--traj_transformed", traj_transformed,
-        "--traj_embedding", f'{save_path}/embedding_{basename_save}.dat',
-        "--save_path", save_path,
-    ])
 
 
 if __name__ == '__main__':

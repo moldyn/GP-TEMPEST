@@ -375,7 +375,7 @@ class TEMPEST(nn.Module):
         self.compute_kernel_matrices(t)
         gp_mean, gp_var = [], []
         loss_L3, loss_KL = [], []
-        for latent_dim in range(self.dim_latent):  # for each channel l individually
+        for latent_dim in range(self.dim_latent):
             self.compute_gp_params(
                 t,
                 qzx_mu[:, latent_dim],
@@ -485,7 +485,7 @@ class TEMPEST(nn.Module):
                 loss_recon += self.recon_loss.item()
                 loss_gp += self.gp_KL.item()
                 if is_training:
-                    self.elbo.backward()  # removed retain_graph=True in order to save memory
+                    self.elbo.backward()
                     optimizer.step()
 
             nr_frames += t_batch.shape[0]
