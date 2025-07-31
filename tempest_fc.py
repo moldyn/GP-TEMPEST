@@ -305,7 +305,7 @@ class TEMPEST(nn.Module):
                     qzx_mu / qzx_var,
                 )
             )
-        )  # Eq.(7) in Tian24 Methods
+        )
         self.gp_mean_sigma = self.kernel_nn + torch.diagonal(
             -torch.matmul(
                 self.kernel_nm,
@@ -320,7 +320,7 @@ class TEMPEST(nn.Module):
                     self.kernel_mn,
                 )
             )
-        ) # GP_mean_vector and GP_mean_sigma is updated posterior, while mu_l and A_l acts more like a prior (compare eq 9 in Tian24)
+        )
 
     def variational_loss(self, qzx_mu, qzx_var):
         """
@@ -398,7 +398,7 @@ class TEMPEST(nn.Module):
             _gauss_cross_entropy(gp_mean, gp_var, qzx_mu, qzx_var)
         )
         self.gp_KL = gp_cross_entropy - elbo_gp
-        latent_dist = Normal(qzx_mu, qzx_var)  # todo: sqrt ja oder nein?
+        latent_dist = Normal(qzx_mu, qzx_var)
         latent_samples = latent_dist.rsample()
         qxz = self.decoder(latent_samples)
         loss_L2 = nn.MSELoss(reduction='mean')
