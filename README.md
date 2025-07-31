@@ -11,13 +11,6 @@ GP-TEMPEST is a PyTorch implementation of the Gaussian Process Variational Autoe
 - **Sparse GP inference** with inducing points for scalability to large molecular trajectories  
 - **Compatible with large MD datasets** and batch-wise training  
 
-## Installation
-
-Clone the repository and install required dependencies (e.g., PyTorch):
-
-git clone https://github.com/moldyn/GP-TEMPEST.git
-cd GP-TEMPEST
-
 ## Reference
 
 If you use GP-TEMPEST in your research or teaching, **please cite** the following paper:
