@@ -7,9 +7,20 @@ from torch.utils.data import DataLoader, random_split
 from tqdm.auto import tqdm, trange
 
 
-def _num_stabilize_diag(mat, stabilizer=1e-8):
+def _num_stabilize_diag(mat, stabilizer=1e-6):
     diag = torch.eye(mat.size(-1), device=mat.device).expand(mat.shape)
     return mat + stabilizer * diag
+
+
+def _robust_log_determinant(mat):
+    stabilized_mat = _num_stabilize_diag(mat, stabilizer=1e-5)
+    try:
+        cholesky_decomposition = torch.linalg.cholesky(stabilized_mat)
+        diag_elements = torch.diagonal(cholesky_decomposition)
+        diag_elements = torch.clamp(diag_elements, min=1e-8)
+        return 2 * torch.sum(torch.log(diag_elements))
+    except torch._C._LinAlgError:
+        return torch.logdet(stabilized_mat)
 
 
 def _cholesky_log_determinant(mat):
@@ -27,7 +38,6 @@ def _reparameterize(mu, var):
 
 
 def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
-    """Proof see SI Tian24, Proposition 4 on p.83"""
     scaled_square_diff = (
         var_l + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
     ) / qzx_var
@@ -103,6 +113,7 @@ class GaussianLayer(nn.Module):
         """Learns latent space and samples from learned Gaussian."""
         mu = self.mu(x)
         variance = self.var(x)
+        variance = torch.clamp(variance, min=1e-8)
         z = _reparameterize(mu, variance)
         return mu, variance, z
 
@@ -269,7 +280,7 @@ class TEMPEST(nn.Module):
         )  # see Eq.(9) in Jazbec21
         Sigma_l_inv = torch.linalg.inv(_num_stabilize_diag(Sigma_l))
         self.mu_l = constant * torch.matmul(
-            self.kernel_mm,  # error: original code takes self.kernel_nm
+            self.kernel_mm,
             torch.matmul(
                 Sigma_l_inv,
                 torch.matmul(
@@ -317,8 +328,10 @@ class TEMPEST(nn.Module):
         Compare eg. Eq.(7) and (10) in Jazbec21.
         More details in Jazbec21 SI B, proposition B.1
         """
-        log_det_kmm = _cholesky_log_determinant(self.kernel_mm)
-        log_det_A = _cholesky_log_determinant(self.A_l)
+        # log_det_kmm = _cholesky_log_determinant(self.kernel_mm)
+        # log_det_A = _cholesky_log_determinant(self.A_l)
+        log_det_kmm = _robust_log_determinant(self.kernel_mm)
+        log_det_A = _robust_log_determinant(self.A_l)
         KL_div = 0.5 * (-self.inducing_points.shape[0] + torch.trace(
             torch.matmul(
                 self.kernel_mm_inv,
