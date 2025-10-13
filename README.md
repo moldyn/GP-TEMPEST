@@ -17,4 +17,4 @@ If you use GP-TEMPEST in your research or teaching, **please cite** the followin
 
 > G. Diez, N. Dethloff, G. Stock,  
 > "Recovering Hidden Degrees of Freedom Using Gaussian Processes,"  
-> (2025). https://arxiv.org/abs/2505.18072
+> J. Chem. Phys. 163, 124105 (2025), https://doi.org/10.1063/5.0282147
