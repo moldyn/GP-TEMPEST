@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "gp-tempest"
+version = "0.1.0"
+description = "Gaussian Process Temporal Embedding for Protein Simulations and Transitions"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Georg Diez" },
+    { name = "Nils Dethloff" },
+    { name = "Gerhard Stock" },
+]
+keywords = [
+    "molecular dynamics",
+    "dimensionality reduction",
+    "variational autoencoder",
+    "gaussian process",
+    "machine learning",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+    "torch-geometric>=2.0.0",
+    "scikit-learn>=1.0.0",
+    "numpy>=1.21.0",
+    "matplotlib>=3.4.0",
+    "prettypyplot>=0.10.0",
+    "pyyaml>=6.0",
+    "click>=8.0.0",
+    "tqdm>=4.60.0",
+    "msmhelper>=1.0.0",
+]
+
+[project.scripts]
+tempest = "tempest_main:main"
+tempest-gnn = "tempest_main_gnn:main"
+
+[project.urls]
+Paper = "https://doi.org/10.1063/5.0282147"
+Repository = "https://github.com/moldyn/GP-TEMPEST"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tempest*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", "setup.py"]
