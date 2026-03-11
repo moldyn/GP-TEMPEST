@@ -27,7 +27,6 @@ GP-TEMPEST is a PyTorch implementation of the Gaussian Process Variational Autoe
 - **Physics-informed dimensionality reduction** using Gaussian Processes as temporal priors
 - **Flexible kernel selection** with support for the Matérn kernel (ν = 0.5, 1.5, 2.5)
 - **Sparse GP inference** with inducing points for scalability to large molecular trajectories
-- **Graph Neural Network variant** (GP-TEMPEST-GNN) for protein structure-aware encoding
 - **Compatible with large MD datasets** and batch-wise training
 
 ## Installation
@@ -41,7 +40,6 @@ cd GP-TEMPEST
 **2. Install dependencies:**
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu  # or cu118 for CUDA
-pip install torch-geometric
 pip install -r requirements.txt
 ```
 
@@ -56,12 +54,6 @@ python tempest_main.py --generate_config
 
 # Run with your config
 python tempest_main.py --config my_config.yaml
-```
-
-**Graph neural network variant:**
-```bash
-python tempest_main_gnn.py --generate_config
-python tempest_main_gnn.py --config my_gnn_config.yaml
 ```
 
 ### Python API

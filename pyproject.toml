@@ -35,7 +35,6 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "torch>=2.0.0",
-    "torch-geometric>=2.0.0",
     "scikit-learn>=1.0.0",
     "numpy>=1.21.0",
     "matplotlib>=3.4.0",
@@ -48,7 +47,6 @@ dependencies = [
 
 [project.scripts]
 tempest = "tempest_main:main"
-tempest-gnn = "tempest_main_gnn:main"
 
 [project.urls]
 Paper = "https://doi.org/10.1063/5.0282147"
