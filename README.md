@@ -90,7 +90,8 @@ embedding = model.extract_latent_space(dataset, batch_size=512)
 
 ### Configuration file
 
-GP-TEMPEST is configured via YAML files. Generate a template with `--generate_config` and adjust the following key parameters:
+GP-TEMPEST is configured via YAML files. Generate a template with `--generate_config` and adjust the following key parameters.
+The discussion of these parameters can be found in the paper.
 
 | Parameter | Description |
 |-----------|-------------|
