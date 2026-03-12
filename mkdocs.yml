@@ -1,0 +1,69 @@
+site_name: GP-TEMPEST
+site_description: Gaussian Process Temporal Embedding for Protein Simulations and Transitions
+site_url: https://moldyn.github.io/GP-TEMPEST
+repo_url: https://github.com/moldyn/GP-TEMPEST
+repo_name: moldyn/GP-TEMPEST
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  logo: hero_light.png
+  favicon: hero_light.png
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Usage: usage.md
+  - API Reference:
+    - Model: api/model.md
+    - Kernel: api/kernel.md
+    - Utilities: api/utils.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/moldyn/GP-TEMPEST
+  version:
+    provider: mike
