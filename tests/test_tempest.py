@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from tempest_fc import TEMPEST, MaternKernel
+from gptempest import TEMPEST, MaternKernel
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from tempest_fc import MaternKernel
+from gptempest import MaternKernel
 
 
 @pytest.fixture

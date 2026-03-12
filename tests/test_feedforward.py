@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from tempest_fc import FeedForwardNN, GaussianLayer
+from gptempest import FeedForwardNN, GaussianLayer
 
 
 class TestFeedForwardNN:

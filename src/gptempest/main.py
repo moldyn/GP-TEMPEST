@@ -7,8 +7,8 @@ import click
 import numpy as np
 import torch
 
-import tempest_utils
-from tempest_fc import TEMPEST, MaternKernel
+from gptempest import utils
+from gptempest.fc import TEMPEST, MaternKernel
 
 
 @click.command(no_args_is_help=True)
@@ -25,7 +25,7 @@ from tempest_fc import TEMPEST, MaternKernel
 def main(config, generate_config):
     """Run TEMPEST dimensionality reduction."""
     if generate_config:
-        out_file = tempest_utils.generate_yaml_config(
+        out_file = utils.generate_yaml_config(
             'default_tempest_config.yaml',
         )
         print(f'created a new config file {out_file}.')
@@ -35,7 +35,7 @@ def main(config, generate_config):
     (data_path, inducing_points_path, save_path, cuda, dim_input,
         dim_latent, layers_hidden, epochs, batch_size, learning_rate,
         weight_decay, beta, kernel_nu, kernel_scale, header) = \
-        tempest_utils.yaml_config_reader(config)
+        utils.yaml_config_reader(config)
     print(header)
 
     ind_points = inducing_points_path.split('/')[-1].split('.')[0]
@@ -50,7 +50,7 @@ def main(config, generate_config):
     torch.autograd.set_detect_anomaly(True)
     dtype = torch.float64
 
-    dataset = tempest_utils.load_prepare_data(data_path, dtype)
+    dataset = utils.load_prepare_data(data_path, dtype)
     inducing_points = np.loadtxt(inducing_points_path)
     N_data_points = len(dataset)
     train_size = 1
