@@ -5,10 +5,24 @@
 - Python 3.9+
 - PyTorch 2.0+
 
-## From GitHub
+## From PyPI
 
 ```bash
-pip install git+https://github.com/moldyn/GP-TEMPEST.git
+pip install gp-tempest
+```
+
+## GPU support
+
+PyTorch will default to CPU. For GPU training, install torch with CUDA first:
+
+```bash
+# CUDA 11.8
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+pip install gp-tempest
+
+# CUDA 12.1
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+pip install gp-tempest
 ```
 
 ## From source
@@ -16,8 +30,6 @@ pip install git+https://github.com/moldyn/GP-TEMPEST.git
 ```bash
 git clone https://github.com/moldyn/GP-TEMPEST.git
 cd GP-TEMPEST
-pip install torch --index-url https://download.pytorch.org/whl/cpu  # CPU only
-# pip install torch  # for GPU (CUDA)
 pip install -e .
 ```
 

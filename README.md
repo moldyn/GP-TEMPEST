@@ -17,9 +17,12 @@
   <a href="https://codecov.io/gh/moldyn/GP-TEMPEST"><img src="https://codecov.io/gh/moldyn/GP-TEMPEST/branch/main/graph/badge.svg" alt="Coverage"></a>
   <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?logo=pytorch" alt="PyTorch">
+  <a href="https://moldyn.github.io/GP-TEMPEST"><img src="https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs" alt="Docs"></a>
+  <a href="https://pypi.org/project/gp-tempest"><img src="https://img.shields.io/pypi/v/gp-tempest" alt="PyPI"></a>
 </p>
 
 <p align="center">
+  <a href="https://moldyn.github.io/GP-TEMPEST">Documentation</a> •
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
@@ -39,16 +42,21 @@ GP-TEMPEST is a PyTorch implementation of the Gaussian Process Variational Autoe
 
 ## Installation
 
-**1. Clone the repository:**
+```bash
+pip install gp-tempest
+```
+
+> **Note:** PyTorch is listed as a dependency but pip will install the CPU version by default. For GPU support install torch manually first:
+> ```bash
+> pip install torch --index-url https://download.pytorch.org/whl/cu118
+> pip install gp-tempest
+> ```
+
+**From source:**
 ```bash
 git clone https://github.com/moldyn/GP-TEMPEST.git
 cd GP-TEMPEST
-```
-
-**2. Install dependencies:**
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu  # or cu118 for CUDA
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Usage
