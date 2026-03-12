@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -45,8 +46,27 @@ def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
 
 
 class FeedForwardNN(nn.Module):
-    """Simple linear NN with LeakyReLU activation."""
-    def __init__(self, layer_sizes, linear=False):
+    """Feed-forward neural network with optional LeakyReLU activations.
+
+    Builds a fully-connected network with batch normalisation between layers.
+    Used as the encoder and decoder backbone inside TEMPEST.
+    The list defines neuron counts at each node, so ``len(layer_sizes) - 1``
+    linear layers are created.
+
+    Args:
+        layer_sizes: List of integers specifying the neuron count at each
+            node, e.g. ``[128, 64, 32]`` creates two linear layers
+            (128→64 and 64→32).
+        linear: If ``True``, omit all activation functions (pure linear
+            network). Defaults to ``False``.
+
+    Example:
+        ```python
+        net = FeedForwardNN([128, 64, 32])
+        out = net(torch.randn(16, 128))  # shape (16, 32)
+        ```
+    """
+    def __init__(self, layer_sizes: list[int], linear: bool = False):
         super().__init__()
         # Check if layer_sizes is a list of integers
         assert isinstance(layer_sizes, list), (
@@ -146,7 +166,30 @@ class InferenceNN(nn.Module):
 
 
 class MaternKernel(nn.Module):
-    def __init__(self, scale, nu, dtype):
+    """Matérn covariance kernel for Gaussian Process regression.
+
+    Computes the Matérn kernel between sets of time points. The smoothness
+    parameter ν controls the differentiability of the GP sample paths:
+    ν=0.5 gives the Ornstein–Uhlenbeck process, ν=1.5 once-differentiable
+    paths, and ν=2.5 twice-differentiable paths.
+
+    Args:
+        scale: Time-scale parameter. Larger values mean slower-varying GPs.
+            Typically set to the number of frames in the trajectory.
+        nu: Matérn smoothness parameter. Must be one of ``0.5``, ``1.5``,
+            or ``2.5``.
+        dtype: PyTorch dtype, e.g. ``torch.float64``.
+
+    Raises:
+        RuntimeError: If ``nu`` is not one of the supported values.
+
+    Example:
+        ```python
+        kernel = MaternKernel(nu=1.5, scale=1000.0, dtype=torch.float64)
+        K = kernel.kernel_mat(t1, t2)  # shape (N, M)
+        ```
+    """
+    def __init__(self, scale: float, nu: float, dtype: torch.dtype):
         super(MaternKernel, self).__init__()
         self.scale = torch.tensor([scale], dtype=dtype)
         self.device = self.scale.device
@@ -197,25 +240,71 @@ class MaternKernel(nn.Module):
 
 
 class TEMPEST(nn.Module):
+    """Gaussian Process Temporal Embedding for Protein Simulations and 
+    Transitions.
+
+    GP-TEMPEST is a GP-VAE that combines a variational autoencoder with a
+    sparse Gaussian Process prior in the latent space. The GP prior enforces
+    temporal smoothness and allows the model to recover kinetically relevant
+    degrees of freedom from molecular dynamics trajectories.
+
+    The architecture consists of:
+
+    - **Encoder** — inference network q(z|x) mapping frames to a Gaussian
+      distribution in latent space.
+    - **Decoder** — generative network p(x|z) reconstructing input features.
+    - **Sparse GP** — Gaussian Process with inducing points acting as a
+      temporal prior on the latent trajectories.
+
+    Args:
+        cuda: If ``True``, move the model to GPU.
+        kernel: A :class:`MaternKernel` instance defining the GP covariance.
+        dim_input: Dimensionality of the input features.
+        dim_latent: Dimensionality of the latent space (typically 2).
+        layers_hidden_encoder: Hidden layer sizes for the encoder,
+            e.g. ``[32, 32, 32]``.
+        layers_hidden_decoder: Hidden layer sizes for the decoder,
+            e.g. ``[32, 32, 32]``. Usually the reverse of the encoder.
+        inducing_points: Array of inducing point timestamps. Should cover
+            metastable states and transitions in the trajectory.
+        beta: Weight of the GP regularisation term in the ELBO.
+        N_data: Total number of frames in the dataset. Used to scale the
+            mini-batch ELBO correctly.
+        dtype: PyTorch dtype, e.g. ``torch.float64``.
+
+    Example:
+        ```python
+        kernel = MaternKernel(nu=1.5, scale=1e3, dtype=torch.float64)
+        model = TEMPEST(
+            cuda=False,
+            kernel=kernel,
+            dim_input=10,
+            dim_latent=2,
+            layers_hidden_encoder=[32, 32],
+            layers_hidden_decoder=[32, 32],
+            inducing_points=np.linspace(0, 999, 50),
+            beta=50.0,
+            N_data=1000,
+            dtype=torch.float64,
+        )
+        model.train_model(dataset, train_size=1, learning_rate=1e-4,
+                          weight_decay=1e-6, batch_size=512, n_epochs=100)
+        embedding = model.extract_latent_space(dataset, batch_size=512)
+        ```
+    """
     def __init__(
         self,
-        cuda,
-        kernel,
-        dim_input,
-        dim_latent,
-        layers_hidden_encoder,
-        layers_hidden_decoder,
-        inducing_points,
-        beta,
-        N_data,
-        dtype,
+        cuda: bool,
+        kernel: MaternKernel,
+        dim_input: int,
+        dim_latent: int,
+        layers_hidden_encoder: list[int],
+        layers_hidden_decoder: list[int],
+        inducing_points: np.ndarray,
+        beta: float,
+        N_data: int,
+        dtype: torch.dtype,
     ):
-        """Initializes the TEMPEST network architecture.
-            inducing_points (array_like): the inducing points which are used
-                for the sparse GP regression. This inducing points should cover
-                important events over the time series such as transitions and
-                timepoints in which the system is in a metastable state.
-        """
         super().__init__()
         self.dtype = dtype
         self.device = torch.device('cuda' if cuda else 'cpu')
@@ -458,15 +547,23 @@ class TEMPEST(nn.Module):
                 'LR': f'{optimizer.param_groups[0]["lr"]:.2e}'
             })
 
-    def train_epoch(self, pbar, optimizer, is_training=True):
+    def train_epoch(
+        self, 
+        pbar: tqdm, 
+        optimizer: torch.optim.Optimizer, 
+        is_training: bool = True,
+    ) -> tuple[float, float, float]:
         """Train the model for one epoch.
 
         Args:
-            loader (DataLoader): DataLoader for training data.
-            optimizer (torch.optim.Optimizer): Optimizer for model parameters.
+            pbar: Progress-bar-wrapped DataLoader for the current epoch.
+            optimizer: AdamW optimizer for model parameters.
+            is_training: If ``False``, run in eval mode without gradient
+                updates. Defaults to ``True``.
 
         Returns:
-            tuple: Average training losses (ELBO, reconstruction, GP KL) for the epoch.
+            Tuple of average per-frame losses ``(ELBO, reconstruction, GP KL)``
+            for the epoch.
         """
         nr_frames, loss_elbo, loss_recon, loss_gp = 0, 0, 0, 0
         if is_training:
@@ -497,7 +594,25 @@ class TEMPEST(nn.Module):
         return loss_elbo / nr_frames, loss_recon / nr_frames, \
             loss_gp / nr_frames
 
-    def extract_latent_space(self, dataset, batch_size):
+    def extract_latent_space(
+        self, 
+        dataset: torch.utils.data.TensorDataset, 
+        batch_size: int,
+    ) -> torch.Tensor:
+        """Extract the GP-smoothed latent embedding for all frames.
+
+        Runs the encoder and GP posterior in evaluation mode over the full
+        dataset and returns the latent coordinates for each frame.
+
+        Args:
+            dataset: A ``TensorDataset`` of ``(features, times)`` as returned
+                by :func:`~gptempest.utils.load_prepare_data`.
+            batch_size: Number of frames per batch.
+
+        Returns:
+            Tensor of shape ``(N, dim_latent)`` containing the latent
+            coordinates for all N frames.
+        """
         self.eval()
         latent_samples = []
 
