@@ -64,7 +64,7 @@ import torch
 from gptempest import TEMPEST, MaternKernel, load_prepare_data
 
 # Set up kernel and model
-kernel = MaternKernel(scale=10.0, nu=2.5, dtype=torch.float64)
+kernel = MaternKernel(scale=10.0, nu=1.5, dtype=torch.float64)
 inducing_points = np.linspace(0, 1, 50)
 
 model = TEMPEST(
@@ -108,7 +108,7 @@ If you use GP-TEMPEST in your research, please cite:
 ```bibtex
 @article{diez2025gptempest,
   title   = {Recovering Hidden Degrees of Freedom Using Gaussian Processes},
-  author  = {Diez, Georg and Dethloff, Nils and Stock, Gerhard},
+  author  = {Diez, Georg and Dethloff, Nele and Stock, Gerhard},
   journal = {J. Chem. Phys.},
   volume  = {163},
   pages   = {124105},
