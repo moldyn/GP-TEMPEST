@@ -61,8 +61,7 @@ python tempest_main.py --config my_config.yaml
 ```python
 import numpy as np
 import torch
-from tempest_fc import TEMPEST, MaternKernel
-from tempest_utils import load_prepare_data
+from gptempest import TEMPEST, MaternKernel, load_prepare_data
 
 # Set up kernel and model
 kernel = MaternKernel(scale=10.0, nu=2.5, dtype=torch.float64)

@@ -3,16 +3,12 @@ message: "If you use this software, please cite both the software and the paper 
 type: software
 title: "GP-TEMPEST: Gaussian Process Temporal Embedding for Protein Simulations and Transitions"
 version: "0.1.0"
-date-released: "2025-01-01"
+date-released: "2024-11-18"
 license: MIT
 repository-code: "https://github.com/moldyn/GP-TEMPEST"
 authors:
   - family-names: Diez
     given-names: Georg
-  - family-names: Dethloff
-    given-names: Nils
-  - family-names: Stock
-    given-names: Gerhard
 preferred-citation:
   type: article
   title: "Recovering Hidden Degrees of Freedom Using Gaussian Processes"
@@ -20,7 +16,7 @@ preferred-citation:
     - family-names: Diez
       given-names: Georg
     - family-names: Dethloff
-      given-names: Nils
+      given-names: Nele
     - family-names: Stock
       given-names: Gerhard
   journal: "The Journal of Chemical Physics"
@@ -28,4 +24,4 @@ preferred-citation:
   issue: 12
   pages: "124105"
   year: 2025
-  doi: "10.1063/5.0282147"
+  doi: "https://doi.org/10.1063/5.0282147"
