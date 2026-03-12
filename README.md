@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero_light.png">
+    <img alt="GP-TEMPEST" src="docs/hero_light.png" width="800">
+  </picture>
+</p>
+
 # GP-TEMPEST
 
 **Gaussian Process Temporal Embedding for Protein Simulations and Transitions**
