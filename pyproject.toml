@@ -10,8 +10,6 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
     { name = "Georg Diez" },
-    { name = "Nils Dethloff" },
-    { name = "Gerhard Stock" },
 ]
 keywords = [
     "molecular dynamics",
@@ -42,24 +40,22 @@ dependencies = [
     "pyyaml>=6.0",
     "click>=8.0.0",
     "tqdm>=4.60.0",
-    "msmhelper>=1.0.0",
 ]
 
 [project.scripts]
-tempest = "tempest_main:main"
+tempest = "gptempest.main:main"
 
 [project.urls]
 Paper = "https://doi.org/10.1063/5.0282147"
 Repository = "https://github.com/moldyn/GP-TEMPEST"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["tempest*"]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.coverage.run]
-source = ["."]
-omit = ["tests/*", "setup.py"]
+source = ["src"]
+omit = ["tests/*"]
