@@ -34,7 +34,7 @@ nav:
   - Getting Started:
     - Installation: installation.md
     - Usage: usage.md
-  - Tutorial: tutorial.ipynb
+  - Tutorial: tutorial/tutorial.ipynb
   - API Reference:
     - Model: api/model.md
     - Kernel: api/kernel.md
