@@ -19,6 +19,7 @@
   <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?logo=pytorch" alt="PyTorch">
   <a href="https://moldyn.github.io/GP-TEMPEST"><img src="https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs" alt="Docs"></a>
   <a href="https://pypi.org/project/gp-tempest"><img src="https://img.shields.io/pypi/v/gp-tempest" alt="PyPI"></a>
+  <a href="https://pepy.tech/project/gp-tempest"><img src="https://static.pepy.tech/badge/gp-tempest" alt="Total Downloads"></a>
 </p>
 
 <p align="center">
