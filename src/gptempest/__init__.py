@@ -1,6 +1,6 @@
 """GP-TEMPEST: Gaussian Process Temporal Embedding for Protein Simulations and Transitions."""
 
-from gptempest.fc import (
+from gptempest.model import (
     TEMPEST,
     MaternKernel,
     FeedForwardNN,

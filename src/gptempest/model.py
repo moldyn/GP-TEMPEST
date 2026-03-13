@@ -9,11 +9,32 @@ from tqdm.auto import tqdm, trange
 
 
 def _num_stabilize_diag(mat, stabilizer=1e-6):
+    """Add a small diagonal jitter to a matrix for numerical stability.
+
+    Args:
+        mat: Square matrix or batch of square matrices.
+        stabilizer: Value added to each diagonal element. Defaults to ``1e-6``.
+
+    Returns:
+        Matrix with ``stabilizer`` added along the diagonal.
+    """
     diag = torch.eye(mat.size(-1), device=mat.device).expand(mat.shape)
     return mat + stabilizer * diag
 
 
 def _robust_log_determinant(mat):
+    """Compute the log-determinant of a matrix via Cholesky with a fallback.
+
+    Attempts a Cholesky decomposition for numerical stability. Falls back to
+    ``torch.logdet`` if the Cholesky decomposition fails (e.g. due to
+    near-singular matrices).
+
+    Args:
+        mat: Symmetric positive-definite matrix.
+
+    Returns:
+        Scalar log-determinant of ``mat``.
+    """
     stabilized_mat = _num_stabilize_diag(mat, stabilizer=1e-5)
     try:
         cholesky_decomposition = torch.linalg.cholesky(stabilized_mat)
@@ -25,6 +46,14 @@ def _robust_log_determinant(mat):
 
 
 def _cholesky_log_determinant(mat):
+    """Compute the log-determinant of a matrix via Cholesky decomposition.
+
+    Args:
+        mat: Symmetric positive-definite matrix.
+
+    Returns:
+        Scalar log-determinant of ``mat``.
+    """
     cholesky_decomposition = torch.linalg.cholesky(
         _num_stabilize_diag(mat),
     )
@@ -39,6 +68,19 @@ def _reparameterize(mu, var):
 
 
 def _gauss_cross_entropy(mu_l, var_l, qzx_mu, qzx_var):
+    """Compute the Gaussian cross-entropy between the GP posterior and the encoder.
+
+    Evaluates E_q[log N(z; mu_l, var_l)] where q = N(qzx_mu, qzx_var).
+
+    Args:
+        mu_l: GP posterior mean, shape ``(N, dim_latent)``.
+        var_l: GP posterior variance, shape ``(N, dim_latent)``.
+        qzx_mu: Encoder posterior mean, shape ``(N, dim_latent)``.
+        qzx_var: Encoder posterior variance, shape ``(N, dim_latent)``.
+
+    Returns:
+        Element-wise cross-entropy tensor of shape ``(N, dim_latent)``.
+    """
     scaled_square_diff = (
         var_l + mu_l**2 - 2 * mu_l * qzx_mu + qzx_mu**2
     ) / qzx_var
@@ -139,7 +181,18 @@ class GaussianLayer(nn.Module):
 
 
 class InferenceNN(nn.Module):
-    """The inference network corresponds to the encoder in a VAE."""
+    """Encoder network that maps input frames to a Gaussian latent distribution.
+
+    Wraps a :class:`FeedForwardNN` backbone followed by a
+    :class:`GaussianLayer` that outputs the mean, variance, and a
+    reparameterised sample for each latent dimension.
+
+    Args:
+        layers_encoder: Layer sizes for the backbone network, including the
+            input dimension as the first element.
+        layers_gaussian: Two-element list ``[hidden_dim, dim_latent]`` for
+            the mean and variance heads.
+    """
     def __init__(
         self,
         layers_encoder,
@@ -205,6 +258,14 @@ class MaternKernel(nn.Module):
         return self
 
     def _compute_kernel(self, distance):
+        """Evaluate the Matérn kernel for pre-scaled pairwise distances.
+
+        Args:
+            distance: Tensor of non-negative scaled distances.
+
+        Returns:
+            Tensor of kernel values with the same shape as ``distance``.
+        """
         exp_component = torch.exp(-torch.sqrt(torch.tensor(
             self.nu * 2, dtype=self.dtype, device=self.device
         )) * distance)
@@ -221,26 +282,58 @@ class MaternKernel(nn.Module):
         return prefac * exp_component
 
     def _scale_times(self, t1, t2):
-        # scale the times with the user defined scaling factor
-        # subtract one mean to guarantee that the times are not shifted
+        """Center and scale two time arrays by the kernel time-scale.
+
+        Subtracts the mean of ``t1`` from both arrays and divides by
+        ``self.scale``, ensuring the GP is not sensitive to the absolute
+        position of the trajectory in time.
+
+        Args:
+            t1: Time array of shape ``(N, 1)``.
+            t2: Time array of shape ``(M, 1)``.
+
+        Returns:
+            Tuple ``(t1_scaled, t2_scaled)`` of the same shapes.
+        """
         mean = t1.mean(dim=-2, keepdim=True)
         t1s = t1.sub(mean).div_(self.scale)
         t2s = t2.sub(mean).div_(self.scale)
         return t1s, t2s
 
     def kernel_mat(self, t1, t2):
+        """Compute the full Matérn kernel matrix between two time arrays.
+
+        Args:
+            t1: Time array of shape ``(N, 1)``.
+            t2: Time array of shape ``(M, 1)``.
+
+        Returns:
+            Kernel matrix of shape ``(N, M)``.
+        """
         t1_s, t2_s = self._scale_times(t1, t2)
         distance = torch.cdist(t1_s, t2_s)
         return self._compute_kernel(distance)
 
     def kernel_diag(self, t1, t2):
+        """Compute element-wise Matérn kernel values between paired time points.
+
+        Equivalent to the diagonal of ``kernel_mat(t1, t2)`` but more
+        efficient as it avoids computing the full pairwise distance matrix.
+
+        Args:
+            t1: Time array of shape ``(N, 1)``.
+            t2: Time array of shape ``(N, 1)``.
+
+        Returns:
+            Kernel values of shape ``(N,)``.
+        """
         t1_s, t2_s = self._scale_times(t1, t2)
         distance = ((t1_s - t2_s)**2).sum(dim=1).sqrt()
         return self._compute_kernel(distance).squeeze()
 
 
 class TEMPEST(nn.Module):
-    """Gaussian Process Temporal Embedding for Protein Simulations and 
+    """Gaussian Process Temporal Embedding for Protein Simulations and
     Transitions.
 
     GP-TEMPEST is a GP-VAE that combines a variational autoencoder with a
@@ -265,7 +358,7 @@ class TEMPEST(nn.Module):
             e.g. ``[32, 32, 32]``.
         layers_hidden_decoder: Hidden layer sizes for the decoder,
             e.g. ``[32, 32, 32]``. Usually the reverse of the encoder.
-        inducing_points: Array of inducing point timestamps. Should cover
+        inducing_points: 1-D array of inducing point timestamps. Should cover
             metastable states and transitions in the trajectory.
         beta: Weight of the GP regularisation term in the ELBO.
         N_data: Total number of frames in the dataset. Used to scale the
@@ -326,6 +419,20 @@ class TEMPEST(nn.Module):
         self.N_data = N_data
 
     def compute_kernel_matrices(self, t):
+        """Precompute all GP kernel matrices needed for the current batch.
+
+        Stores the following attributes on ``self``:
+
+        - ``kernel_mm``: GP kernel between inducing points, shape ``(M, M)``.
+        - ``kernel_mm_inv``: Inverse of the stabilised ``kernel_mm``.
+        - ``kernel_nn``: Diagonal kernel values for the batch, shape ``(N,)``.
+        - ``kernel_nm``: Cross-kernel between batch and inducing points,
+          shape ``(N, M)``.
+        - ``kernel_mn``: Transpose of ``kernel_nm``, shape ``(M, N)``.
+
+        Args:
+            t: Batch timestamps of shape ``(N, 1)``.
+        """
         self.kernel_mm = self.kernel.kernel_mat(
             self.inducing_points,
             self.inducing_points,
@@ -362,6 +469,22 @@ class TEMPEST(nn.Module):
         )
 
     def compute_gp_params(self, t, qzx_mu, qzx_var):
+        """Compute GP posterior parameters for one latent dimension.
+
+        Updates the following attributes on ``self``:
+
+        - ``mu_l``: GP posterior mean at inducing points, shape ``(M,)``.
+        - ``A_l``: GP posterior covariance at inducing points, shape ``(M, M)``.
+        - ``gp_mean_vector``: GP predictive mean at batch points, shape ``(N,)``.
+        - ``gp_mean_sigma``: GP predictive variance at batch points, shape ``(N,)``.
+
+        Follows Eq. (9) in Jazbec et al. (2021).
+
+        Args:
+            t: Batch timestamps of shape ``(N, 1)``.
+            qzx_mu: Encoder posterior mean for one latent dim, shape ``(N,)``.
+            qzx_var: Encoder posterior variance for one latent dim, shape ``(N,)``.
+        """
         constant = self.N_data / t.shape[0]
         Sigma_l = self.kernel_mm + constant * torch.matmul(
             self.kernel_mn,
@@ -458,6 +581,21 @@ class TEMPEST(nn.Module):
         return loss_L3, KL_div
 
     def gp_step(self, x, t):
+        """Compute the full ELBO for a mini-batch.
+
+        Runs the encoder, computes GP kernel matrices and posterior parameters
+        for each latent dimension, evaluates the variational loss, decodes a
+        latent sample, and accumulates the reconstruction loss. Results are
+        stored as attributes:
+
+        - ``self.elbo``: Total loss (reconstruction + beta * GP KL).
+        - ``self.recon_loss``: MSE reconstruction term (scaled by 1e6).
+        - ``self.gp_KL``: GP KL-divergence term.
+
+        Args:
+            x: Input feature batch of shape ``(N, dim_input)``.
+            t: Timestamp batch of shape ``(N, 1)``.
+        """
         qzx = self.encoder(x)
         qzx_mu = qzx['means']
         qzx_var = qzx['variances']
@@ -506,12 +644,17 @@ class TEMPEST(nn.Module):
         """Train the TEMPEST model.
 
         Args:
-            learning_rate (float): learning rate; typicalle 1e-3 to 1e-5
-            batch_size (int): the batch size. As the estimators for the sparse
-                GP regression converge to the estimators for
-                batch size -> number frames, we recommend larger
-                batch sizes > 512
-            n_epochs (int): number of epochs to train
+            dataset: A ``TensorDataset`` of ``(features, times)`` as returned
+                by :func:`~gptempest.utils.load_prepare_data`.
+            train_size: Fraction of the dataset to use for training. Pass
+                ``1`` to use the full dataset.
+            learning_rate: AdamW learning rate; typically between ``1e-3``
+                and ``1e-5``.
+            weight_decay: AdamW weight decay (L2 regularisation).
+            batch_size: Number of frames per mini-batch. Larger batches give
+                better GP estimator accuracy; values above ``512`` are
+                recommended.
+            n_epochs: Number of full passes over the training data.
         """
         train_dataset = dataset if train_size == 1 else random_split(
             dataset=dataset,
@@ -548,9 +691,9 @@ class TEMPEST(nn.Module):
             })
 
     def train_epoch(
-        self, 
-        pbar: tqdm, 
-        optimizer: torch.optim.Optimizer, 
+        self,
+        pbar: tqdm,
+        optimizer: torch.optim.Optimizer,
         is_training: bool = True,
     ) -> tuple[float, float, float]:
         """Train the model for one epoch.
@@ -595,8 +738,8 @@ class TEMPEST(nn.Module):
             loss_gp / nr_frames
 
     def extract_latent_space(
-        self, 
-        dataset: torch.utils.data.TensorDataset, 
+        self,
+        dataset: torch.utils.data.TensorDataset,
         batch_size: int,
     ) -> torch.Tensor:
         """Extract the GP-smoothed latent embedding for all frames.
