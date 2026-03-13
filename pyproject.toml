@@ -47,6 +47,13 @@ dependencies = [
 [project.scripts]
 tempest = "gptempest.main:main"
 
+[project.optional-dependencies]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-include-markdown-plugin",
+]
+
 [project.urls]
 Paper = "https://doi.org/10.1063/5.0282147"
 Repository = "https://github.com/moldyn/GP-TEMPEST"

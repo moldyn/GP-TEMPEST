@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?logo=pytorch" alt="PyTorch">
   <a href="https://moldyn.github.io/GP-TEMPEST"><img src="https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs" alt="Docs"></a>
   <a href="https://pypi.org/project/gp-tempest"><img src="https://img.shields.io/pypi/v/gp-tempest" alt="PyPI"></a>
-  <a href="https://pepy.tech/project/gp-tempest"><img src="https://static.pepy.tech/badge/gp-tempest" alt="Total Downloads"></a>
+  <a href="https://pypistats.org/packages/gp-tempest"><img src="https://img.shields.io/pypi/dt/gp-tempest" alt="Downloads"></a>
 </p>
 
 <p align="center">
@@ -32,14 +32,23 @@
 
 ---
 
-GP-TEMPEST is a PyTorch implementation of the Gaussian Process Variational Autoencoder (GP-VAE) framework for time-aware dimensionality reduction of molecular dynamics (MD) simulations. The method leverages physics-informed Gaussian Process priors to capture temporal correlations in the latent space, enabling the recovery of hidden or kinetically relevant degrees of freedom in complex biomolecular systems.
+GP-TEMPEST is a PyTorch implementation of the Gaussian Process Variational
+Autoencoder (GP-VAE) framework for time-aware dimensionality reduction of
+molecular dynamics (MD) simulations. The method leverages physics-informed
+Gaussian Process priors to capture temporal correlations in the latent space,
+enabling the recovery of hidden or kinetically relevant degrees of freedom in
+complex biomolecular systems.
 
 ## Features
 
 - **Physics-informed dimensionality reduction** using Gaussian Processes as temporal priors
-- **Flexible kernel selection** with support for the Matérn kernel (ν = 0.5, 1.5, 2.5)
-- **Sparse GP inference** with inducing points for scalability to large molecular trajectories
-- **Compatible with large MD datasets** and batch-wise training
+- **Flexible kernel selection** with support for the Matérn kernel 
+(ν = 0.5, 1.5, 2.5)
+- **Sparse GP inference** with inducing points for scalability to large 
+molecular trajectories
+- **Recovery of hidden degrees of freedom** not accessible in any projection 
+of the input data
+- **Free-energy landscapes and kinetic insight** from GP-smoothed, physically interpretable latent coordinates
 
 ## Installation
 
