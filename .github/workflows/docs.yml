@@ -21,7 +21,8 @@ jobs:
       - name: Install docs dependencies
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[docs]"
+          pip install mkdocs-material "mkdocstrings[python]" mkdocs-include-markdown-plugin
+          pip install -e .
 
       - name: Deploy docs
         run: mkdocs gh-deploy --force
