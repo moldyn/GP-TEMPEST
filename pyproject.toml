@@ -51,7 +51,7 @@ tempest = "gptempest.main:main"
 docs = [
     "mkdocs-material",
     "mkdocstrings[python]",
-    "mkdocs-include-markdown-plugin",
+    "pymdown-extensions",
 ]
 
 [project.urls]
