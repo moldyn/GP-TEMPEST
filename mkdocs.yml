@@ -34,6 +34,7 @@ nav:
   - Getting Started:
     - Installation: installation.md
     - Usage: usage.md
+  - Tutorial: tutorial.ipynb
   - API Reference:
     - Model: api/model.md
     - Kernel: api/kernel.md
@@ -41,6 +42,9 @@ nav:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
   - mkdocstrings:
       handlers:
         python:
