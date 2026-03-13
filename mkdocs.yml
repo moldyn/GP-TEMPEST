@@ -43,8 +43,10 @@ nav:
 plugins:
   - search
   - mkdocs-jupyter:
+      include: ["*.ipynb"]
       execute: false
-      include_source: true
+      allow_errors: false
+      ignore_h1_titles: true
   - mkdocstrings:
       handlers:
         python:
