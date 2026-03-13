@@ -20,10 +20,12 @@
   <a href="https://moldyn.github.io/GP-TEMPEST"><img src="https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs" alt="Docs"></a>
   <a href="https://pypi.org/project/gp-tempest"><img src="https://img.shields.io/pypi/v/gp-tempest" alt="PyPI"></a>
   <a href="https://pypistats.org/packages/gp-tempest"><img src="https://img.shields.io/pypi/dt/gp-tempest" alt="Downloads"></a>
+  <a href="https://moldyn.github.io/GP-TEMPEST/tutorial/"><img src="https://img.shields.io/badge/tutorial-notebook-orange?logo=jupyter" alt="Tutorial"></a>
 </p>
 
 <p align="center">
   <a href="https://moldyn.github.io/GP-TEMPEST">Documentation</a> •
+  <a href="https://moldyn.github.io/GP-TEMPEST/tutorial/">Tutorial</a> •
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
