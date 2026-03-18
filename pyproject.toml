@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gp-tempest"
-version = "0.1.1"
+version = "0.1.2"
 description = "Gaussian Process Temporal Embedding for Protein Simulations and Transitions"
 readme = "README.md"
 license = { file = "LICENSE" }

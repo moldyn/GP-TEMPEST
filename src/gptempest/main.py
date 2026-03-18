@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from gptempest import utils
-from gptempest.fc import TEMPEST, MaternKernel
+from gptempest.model import TEMPEST, MaternKernel
 
 
 @click.command(no_args_is_help=True)
