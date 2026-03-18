@@ -22,6 +22,7 @@
   <a href="https://pepy.tech/projects/gp-tempest"><img src="https://static.pepy.tech/badge/gp-tempest" alt="Total Downloads"></a>
   <a href="https://pypistats.org/packages/gp-tempest"><img src="https://img.shields.io/pypi/dm/gp-tempest" alt="Monthly Downloads"></a>
   <a href="https://moldyn.github.io/GP-TEMPEST/tutorial/tutorial/"><img src="https://img.shields.io/badge/tutorial-notebook-orange?logo=jupyter" alt="Tutorial"></a>
+  <a href="https://anaconda.org/conda-forge/gp-tempest"><img src="https://img.shields.io/conda/vn/conda-forge/gp-tempest" alt="conda-forge"></a>
 </p>
 
 <p align="center">
@@ -55,8 +56,14 @@ of the input data
 
 ## Installation
 
+**Via pip:**
 ```bash
 pip install gp-tempest
+```
+
+**Via conda:**
+```bash
+conda install -c conda-forge gp-tempest
 ```
 
 > **Note:** PyTorch is listed as a dependency but pip will install the CPU version by default. For GPU support install torch manually first:
