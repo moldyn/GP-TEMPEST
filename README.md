@@ -20,7 +20,6 @@
   <a href="https://moldyn.github.io/GP-TEMPEST"><img src="https://img.shields.io/badge/docs-MkDocs-526CFE?logo=materialformkdocs" alt="Docs"></a>
   <a href="https://pypi.org/project/gp-tempest"><img src="https://img.shields.io/pypi/v/gp-tempest" alt="PyPI"></a>
   <a href="https://pepy.tech/projects/gp-tempest"><img src="https://static.pepy.tech/badge/gp-tempest" alt="Total Downloads"></a>
-  <a href="https://pypistats.org/packages/gp-tempest"><img src="https://img.shields.io/pypi/dm/gp-tempest" alt="Monthly Downloads"></a>
   <a href="https://moldyn.github.io/GP-TEMPEST/tutorial/tutorial/"><img src="https://img.shields.io/badge/tutorial-notebook-orange?logo=jupyter" alt="Tutorial"></a>
   <a href="https://anaconda.org/conda-forge/gp-tempest"><img src="https://img.shields.io/conda/vn/conda-forge/gp-tempest" alt="conda-forge"></a>
 </p>
